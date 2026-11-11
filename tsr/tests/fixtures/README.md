@@ -20,7 +20,7 @@ evidence, not synthesized agent behavior.
 | `s4-s7-settle.json` | Final JSON report from the same probe with 200 ms settling; reuses the same two probe windows and appends ten tabs. Ten complete markers. |
 | `s6-restart-dictionary.xml` | Exact excerpt of the installed System Events dictionary. Fragment, not a full XML document. No restart AppleEvent was sent. |
 | `s8-uv-python.txt` | uv download completion and Python's JSON report. The successful command was `uv run --no-project --managed-python --python 3.14 python -c 'import curses,json,sys; print(json.dumps({"version":sys.version,"executable":sys.executable,"curses":True}))'`. |
-| `s8-uv-tool-dir.txt` | Read-only `uv tool dir` output. The installed tsr environment's location remains to be measured after the private-tag install. |
+| `s8-uv-tool-dir.txt` | Read-only `uv tool dir` output. The installed tsr environment's location remains to be measured after the public release-tag install. |
 
 Anonymization replaces home paths, project directories, titles, prompt text,
 account metadata and session/message IDs. Installation-path structure remains
@@ -32,8 +32,8 @@ reports preserve target/front distinction, but collapse individual tab IDs.
 Network endpoints and opaque socket/state hex strings in lsof are redacted too.
 PIDs, ttys, timestamps, record types, content structure and measured values remain.
 
-No S5 fixture exists until a fresh-account probe is run. S8's private-tag install
-is also pending; successful Python download is not evidence that it succeeded.
+No S5 fixture exists until a fresh-account probe is run. S8's production
+release-tag install is not represented by these local packaging fixtures.
 
 ## S11 follow-up evidence
 
@@ -55,10 +55,10 @@ These were separately previewed before saving. See `../../docs/s11.md`.
 | `s15-codex-cross-folder-owner.json` | Owner-operated explicit-ID resume from a different project, selecting current directory, with controlled marker history confirmed in a Codex 0.167.1 screenshot. Home/project paths, prompt, marker response and session ID replaced. The owner updated Codex during the check; no cause is assigned to earlier missing history and no earlier-version or passive frontend-mapping claim is made. Exact sanitized contents were previewed before saving. |
 | `s16-process-lifecycle.json` | Approved two-tab probe with owner-launched Codex 0.167.1: projected ps identities, tty matches, pre-exec evidence, harmless sleep comparisons and post-quit liveness. Terminal IDs replaced with aliases; no home paths, prompts or session IDs retained. Owner reported A's shell remaining and Enter required to close B. B used shell-level exec, so production parent-shell return was not tested. Manual startup exceeded two minutes; no timeout/concurrency/reuse/actual reservation implementation pass is claimed. Exact sanitized contents were previewed before saving. |
 | `s8-local-tag-install.json` | Complete projected report from the isolated local git/tag/subdirectory smoke install, execution and uninstall. The generated package, commit and tag live only in a temporary test repository; no project commit or remote push occurred. |
-| `s8-private-remote.txt` | Both read-only tag queries returned this same error with exit 128. The owner then clarified that the repository has not been published yet. |
+| `s8-private-remote.txt` | Historical read-only tag queries against the misspelled owner URL returned the same error with exit 128. The owner clarified at that time that the repository was not yet published. |
 | `s4-empty-terminal-cwds.tsv`, `s4-empty-cwd.txt` | Read-only cleanup inspection before any closing: 32 terminals had empty AppleScript cwd, while lsof returned their correct probe directories. TSV fields: window ID, tab index, terminal ID, tty, cwd, pid. Empty cwd is an intentionally empty field. Lsof directory aliases collapse the three temporary roots. |
 | `s12-boot-time.json` | Native read-only ctypes result compared with the F21 sysctl command. Both returned identical boot seconds/microseconds; no home paths, prompts or session IDs. |
 | `s13-lsof-numeric.json` | Live plain/numeric lsof timing comparison on 64 PIDs. Cwd and observed transcript sets matched; other live file maps differed, so no frozen-descriptor claim is made. |
 | `s14-bulk-layout.json` | Read-only baseline/bulk layout timings and stable-field equality on 11 windows / 62 panes. No private terminal fields are emitted. |
 | `m1-live-save.json` | Final M1 live save/list verification: counts, timings, backup/JSON comparisons and permission modes only. Actual snapshots with private metadata stayed in an isolated temporary state directory, outside fixtures. |
-| `v1-verification.json` | Previewed aggregate final capture timing/counts, actual isolated plain-shell picker/restore/cancellation/quoted-command checks, exact/warning availability counts, measured path encoding cases, and actual production package install/reinstall/removal results. No real-agent restore or fresh-account/private SSH/hosted CI pass is claimed. Private snapshots and runtime paths are omitted. |
+| `v1-verification.json` | Previewed aggregate final capture timing/counts, actual isolated plain-shell picker/restore/cancellation/quoted-command checks, exact/warning availability counts, measured path encoding cases, and actual production package install/reinstall/removal results. No real-agent restore, fresh-account, public release-tag install or hosted CI pass is claimed. Private snapshots and runtime paths are omitted. |

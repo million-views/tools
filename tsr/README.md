@@ -3,8 +3,7 @@
 Save and restore Ghostty tabs, folders and Claude Code, Codex and pi sessions
 on macOS.
 
-Requires Ghostty 1.4 or newer. Install a release with uv and access to the
-private repository:
+Requires Ghostty 1.4 or newer. Install a release with uv:
 
 ```sh
 uv tool install "git+ssh://git@github.com/million-views/tools@tsr-v0.2.0#subdirectory=tsr"
