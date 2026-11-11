@@ -1646,8 +1646,12 @@ def execute(steps: tuple[Step, ...], terminal: TerminalAdapter, journal: Restore
         raise
 
 
-def restore(store: Store, runner: Runner, home: Path, environment: dict[str, str], *, backup: bool = False) -> int:
+def restore(store: Store, runner: Runner, home: Path, environment: dict[str, str], *,
+            backup: bool = False, window: int | None = None) -> int:
     snapshot = store.load(backup=backup)
+    if window is not None and not any(
+            saved_window.index == window for saved_window in snapshot.windows):
+        raise TsrError(f"snapshot has no window {window}; check tsr list", 3)
     try:
         tty = normalize_tty(os.ttyname(0))
     except OSError as exc:
@@ -1663,6 +1667,8 @@ def restore(store: Store, runner: Runner, home: Path, environment: dict[str, str
     if not Path(shell).is_absolute():
         raise TsrError("SHELL must name an absolute executable; correct SHELL and retry", 3)
     rows = restore_rows(snapshot, adapters, shell)
+    if window is not None:
+        rows = tuple(row for row in rows if row.window == window)
     journal = RestoreJournal(store)
     # Reading/interactive cancellation does not create state or take a lock.
     leases = reconcile_leases(journal.read(), live, now=time.time())
@@ -1758,7 +1764,7 @@ def display_folder(folder: str, home: Path) -> str:
         return folder
 
 
-def render(snapshot: Snapshot, home: Path, *, saved: bool = False) -> str:
+def render(snapshot: Snapshot, home: Path, *, saved: bool = False, brief: bool = False) -> str:
     tabs = sum(len(w.tabs) for w in snapshot.windows)
     agents = sum(p.agent is not None for w in snapshot.windows for t in w.tabs for p in t.panes)
     when = datetime.fromisoformat(snapshot.saved_at.replace("Z", "+00:00")).astimezone().strftime("%a %d %b %H:%M")
@@ -1773,6 +1779,9 @@ def render(snapshot: Snapshot, home: Path, *, saved: bool = False) -> str:
                 prompt = (agent.first_prompt or ("(session not identified)" if agent.confidence == "picker" else "(no prompt)")) if agent else ""
                 note = agent.confidence if agent else ""
                 folder = visible(display_folder(pane.cwd, home)) if pane.cwd else "(folder unknown)"
+                if brief:
+                    lines.append(f"  {number:>3}  {name:<6}  {folder}  {note}".rstrip())
+                    continue
                 lines.append(f"  {number:>3}  {name:<6}  {visible(prompt)}  {folder}  {note}".rstrip())
                 if not saved and pane.cwd:
                     command = f"cd -- {shlex.quote(pane.cwd)}"
@@ -1821,16 +1830,34 @@ def log_failure(store: Store, debug: bool) -> None:
 
 def main(argv: list[str] | None = None, *, runner: Runner | None = None,
          environment: dict[str, str] | None = None, home: Path | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="tsr", description="Save, inspect and restore Ghostty agent sessions on macOS.")
+    parser = argparse.ArgumentParser(
+        prog="tsr",
+        description="Save, inspect and restore Ghostty agent sessions on macOS.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Command usage:\n"
+            "  tsr save [--yes]\n"
+            "  tsr list [--json] [--backup] [--brief]\n"
+            "  tsr restore [--backup] [--window N]\n"
+            "  tsr doctor\n\n"
+            "Run 'tsr <command> --help' for option details."
+        ),
+    )
     parser.add_argument("--version", action="version", version=f"tsr {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
     save = commands.add_parser("save", help="capture Ghostty windows and sessions")
     save.add_argument("--yes", action="store_true", help="confirm replacement of a snapshot from before this boot")
-    listing = commands.add_parser("list", help="inspect a saved snapshot and manual resume commands")
+    listing = commands.add_parser("list", help="inspect saved windows, tabs and sessions")
     listing.add_argument("--json", action="store_true", help="print the snapshot as JSON")
     listing.add_argument("--backup", action="store_true", help="inspect the previous snapshot")
+    listing.add_argument(
+        "--brief", action="store_true",
+        help="omit prompts and recovery commands from text output")
     restoring = commands.add_parser("restore", help="pick saved sessions to restore into this Ghostty window")
     restoring.add_argument("--backup", action="store_true", help="restore the previous snapshot")
+    restoring.add_argument(
+        "--window", type=int, metavar="N",
+        help="show only saved window N (number from tsr list) in the picker")
     commands.add_parser("doctor", help="check prerequisites, capture confidence and saved state")
     args = parser.parse_args(argv)
     environment = dict(os.environ) if environment is None else environment
@@ -1840,12 +1867,13 @@ def main(argv: list[str] | None = None, *, runner: Runner | None = None,
         store = state_store(home, environment)
         if args.command == "list":
             snapshot = store.load(backup=args.backup)
-            print(snapshot.to_json(), end="") if args.json else print(render(snapshot, home))
+            print(snapshot.to_json(), end="") if args.json else print(render(snapshot, home, brief=args.brief))
             return 0
         if not store.directory.exists():
             print("macOS may ask to let the requesting app control Ghostty; allow it to capture your terminals.", file=sys.stderr)
         if args.command == "restore":
-            return restore(store, runner or Runner(), home, environment, backup=args.backup)
+            return restore(store, runner or Runner(), home, environment,
+                           backup=args.backup, window=args.window)
         if args.command == "doctor":
             return doctor(store, runner or Runner(), home, environment)
         snapshot = capture(runner or Runner(), home, environment)

@@ -16,7 +16,12 @@ tsr save
 tsr list
 ```
 
+Use `tsr list --brief` to omit prompts and recovery commands while keeping the
+window, tab, agent, folder and confidence details. `tsr list --json` emits the
+full snapshot.
+
 In a fresh Ghostty window, run `tsr restore` and choose a saved window or tab.
+Use `tsr restore --window 2` to limit the picker to saved window 2.
 The first restored pane uses the current tab; additional panes open as tabs in
 saved order. Use arrows or j/k to move, Space to select, Enter to restore, and
 q or Esc to cancel. Split panes restore as separate tabs.

@@ -153,8 +153,8 @@ Four commands. Installing and removing tsr is uv's job (section 7). Nothing else
 | Command | Job |
 | --- | --- |
 | `tsr save [--yes]` | Capture all Ghostty windows, tabs, folders and agent sessions; print what was captured. Replaces the current snapshot and keeps the previous one as a backup. Print "Saved. Restart when ready." The proposed `--restart` is deferred under S6's fallback (F27). |
-| `tsr restore [--backup]` | Open the picker (section 6) and rebuild saved windows or tabs into the window tsr runs in. `--backup` uses the previous snapshot. |
-| `tsr list [--json] [--backup]` | Print the saved windows and tabs without the picker, with each known folder and recovery command, so a window can be rebuilt by hand if needed. Unknown folders show `(folder unknown)` and have no recovery command; JSON contains null cwd. |
+| `tsr restore [--backup] [--window N]` | Open the picker (section 6) and rebuild saved windows or tabs into the window tsr runs in. `--backup` uses the previous snapshot. `--window N` uses the window number shown by `tsr list` to limit the picker; duplicate warnings and tab selection still apply. |
+| `tsr list [--json] [--backup] [--brief]` | Print the saved windows and tabs without the picker, with each known folder and recovery command, so a window can be rebuilt by hand if needed. `--brief` omits prompts and recovery commands while retaining window/tab, agent, folder and confidence. With `--json`, output remains the full snapshot. Unknown folders show `(folder unknown)` and have no recovery command; JSON contains null cwd. |
 | `tsr doctor` | Check what tsr depends on (section 7). |
 
 Plus `tsr --help` and `tsr --version`. Exit codes: `0` success, `1` runtime error, `2` usage error, `3` precondition not met (not in Ghostty, Ghostty too old, Automation denied, no snapshot), each with a one-line fix.
@@ -777,6 +777,12 @@ Each is a test the implementation must pass on a real Mac with Ghostty 1.4. The 
   either mixed-slot order without rewriting either file. Format 1 with null cwd
   is malformed; format 2 round-trips null cwd for plain and agent panes; format
   3 is refused with the upgrade message.
+- **AC-23** `tsr list --brief` retains window/tab, agent, folder and confidence,
+  and omits prompt text and recovery commands. `--json` continues to emit the
+  full snapshot when combined with `--brief`.
+- **AC-24** `tsr restore --window N` shows only that saved window in the picker;
+  the user can still review availability and select tabs before launch. A
+  window number absent from the chosen snapshot produces a clear error.
 
 ## 11. Testing plan
 
@@ -805,7 +811,8 @@ Tests use `unittest` only. Everything below runs in CI on macOS with Python 3.14
 | Executor | Script text per step (escaping), shell wait polling, continue after failure, reservation terminal-ID updates, final `exec` (patched), and immediate per-row cleanup on tab/shell/input/exec failure |
 | Restore lock and lifecycle | Picker takes no lock; bounded exclusive flock; selected-row recheck without AppleScript/lsof; atomic reservations before launch; competing restores cannot reserve the same session; return to picker on newly blocked rows; pending to running via tty/agent/start evidence; live confirmed process persists beyond two minutes; lapse, exit, PID/tty reuse and failure cleanup; never infer session identity from picker-row reservation alone |
 | Snapshot compatibility | Read format 1 and format 2 independently in either state slot; format 1 requires nonempty cwd; format 2 round-trips null cwd; reject format 3; do not rewrite snapshots during reads/restores; derive ambiguity from full groups |
-| Picker | Selection logic driven without a real terminal: Space on window and tab, Enter with and without selection, disabled rows ignored |
+| Picker | Selection logic driven without a real terminal: Space on window and tab, Enter with and without selection, disabled rows ignored; restore window scoping |
+| List output | Full and brief text, no prompt/command leakage in brief, JSON remains full |
 | Doctor | Each doctor result, including the curses and PATH checks |
 
 Transport tests cover escaping and command generation. Pure tests cover selection
