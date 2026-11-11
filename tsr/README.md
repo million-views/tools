@@ -6,8 +6,9 @@ macOS, then restore selected sessions into the window you are using.
 Requires Ghostty 1.4+ and Python 3.14+. Runtime dependencies are standard library
 only. uv supplies the development environment and the `tsr` entry point.
 
-All four commands are implemented. [Verification](docs/v1.md) distinguishes
-passing local checks from the remaining manual and publication checks.
+All four commands are implemented. See the [manual acceptance guide](docs/acceptance.md)
+for the real-agent rehearsal and [verification](docs/v1.md) for local checks and
+remaining acceptance work.
 
 From this directory:
 
