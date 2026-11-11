@@ -1,0 +1,15 @@
+	<suite name="Power Suite" code="powr" description="Terms and Events for controlling System power">
+		<command name="log out" code="fndrlogo" description="Log out the current user">
+			<cocoa class="LogoutVerb" />
+		</command>
+		<command name="restart" code="fndrrest" description="Restart the computer">
+			<cocoa class="RestartVerb" />
+			<parameter name="state saving preference" code="stsv" type="boolean" optional="yes" description="Is the user defined state saving preference followed?">
+				<cocoa key="stateSavingPreference" />
+			</parameter>
+            <documentation>
+                <html>
+                    If &quot;state saving preference&quot; is omitted or false, state is always saved.
+                </html>
+            </documentation>
+		</command>

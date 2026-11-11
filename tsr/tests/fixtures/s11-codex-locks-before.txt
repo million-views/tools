@@ -1,0 +1,7 @@
+p32138
+f31
+n/Users/USER/.codex/thread-writer-locks/SESSION_OTHER_1.lock
+f45
+n/Users/USER/.codex/thread-writer-locks/SESSION_TEST_BEFORE_NEW.lock
+f55
+n/Users/USER/.codex/thread-writer-locks/SESSION_OTHER_3.lock

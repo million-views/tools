@@ -1,0 +1,34 @@
+{
+  "source": "Owner screenshots and reported shell exit codes",
+  "kind": "UI excerpts and owner observations; not complete terminal output",
+  "claude": {
+    "command": "claude --resume",
+    "heading": "Resume session",
+    "project_label": "PROJECT",
+    "scope_hint": "Ctrl+A to show all projects",
+    "branch_hint": "Ctrl+B to only show current branch",
+    "cancel_hint": "Esc to cancel",
+    "cancel_action": "Esc",
+    "returned_to_shell": true,
+    "echo_exit_status": "1"
+  },
+  "codex": {
+    "command": "codex resume",
+    "heading": "Resume a previous session",
+    "filter": "Cwd All",
+    "selected_filter": "Cwd",
+    "status": "Active Archived",
+    "selected_status": "Active",
+    "sort": "Updated Created",
+    "selected_sort": "Updated",
+    "footer_excerpt": "esc new   ^c quit",
+    "cancel_action": "Ctrl+C",
+    "returned_to_shell": true,
+    "echo_exit_status": "0"
+  },
+  "limits": [
+    "Scope switching was not reported as exercised.",
+    "No conversation was selected in this check.",
+    "This does not test explicit-ID resume from another folder."
+  ]
+}

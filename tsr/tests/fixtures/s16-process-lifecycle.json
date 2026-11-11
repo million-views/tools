@@ -1,0 +1,80 @@
+{
+  "source": "Approved S16 probe; owner manually launched and quit two idle Codex sessions",
+  "installed_codex_package_version": "0.167.1",
+  "created_tabs": {
+    "A": {
+      "terminal_id": "TERMINAL_A",
+      "tty": "s057",
+      "tab_reserved_at": 1794353403.2053041,
+      "initial_shell_start_epoch": 1794353403.0,
+      "initial_shell_ps_start_strictly_after_reservation": false,
+      "agent": {
+        "pid": 43843,
+        "ppid": 38911,
+        "tty": "s057",
+        "start_utc": "Tue Nov 10 23:33:18 2026",
+        "start_epoch": 1794353598.0,
+        "executable_basename": "codex",
+        "after_tab_reservation": true
+      },
+      "terminal_tty_matches_while_running": true,
+      "ghostty_foreground_matches_agent": true,
+      "recorded_agent_identity_live_after_exit": false,
+      "terminal_exists_after_exit": true
+    },
+    "B": {
+      "terminal_id": "TERMINAL_B",
+      "tty": "s068",
+      "tab_reserved_at": 1794353405.48194,
+      "initial_shell_start_epoch": 1794353405.0,
+      "initial_shell_ps_start_strictly_after_reservation": false,
+      "agent": {
+        "pid": 38920,
+        "ppid": 38919,
+        "tty": "s068",
+        "start_utc": "Tue Nov 10 23:30:05 2026",
+        "start_epoch": 1794353405.0,
+        "executable_basename": "codex",
+        "after_tab_reservation": false
+      },
+      "terminal_tty_matches_while_running": true,
+      "ghostty_foreground_matches_agent": false,
+      "recorded_agent_identity_live_after_exit": false,
+      "terminal_exists_after_exit": false,
+      "pre_exec": {
+        "pid": 38920,
+        "ppid": 38919,
+        "tty": "s068",
+        "start_utc": "Tue Nov 10 23:30:05 2026",
+        "start_epoch": 1794353405.0,
+        "reserved_at": 1794353617.893444
+      },
+      "same_pre_exec_pid_and_start": true,
+      "ps_start_strictly_after_handoff_reservation": false
+    }
+  },
+  "harmless_sleep_handoffs": {
+    "A": {
+      "observed": true,
+      "same_pid": true,
+      "same_start": true,
+      "ps_start_strictly_after_reservation": false
+    },
+    "B": {
+      "observed": true,
+      "same_pid": true,
+      "same_start": true,
+      "ps_start_strictly_after_reservation": false
+    }
+  },
+  "owner_exit_observation": {
+    "A": "shell remains",
+    "B": "Enter required before closing"
+  },
+  "probe_path_setup": "Temporary PATH export in verified idle probe tabs; home configuration unchanged",
+  "limits": [
+    "Owner-assisted startup exceeded two minutes; no launch-latency or reservation-timeout pass is claimed.",
+    "Tab B used shell-level exec; normal parent-shell return after a tsr-level exec was not tested.",
+    "No Claude/pi handoff, passive session-ID mapping, deliberate PID/tty reuse, concurrency or actual restored.json implementation was tested."
+  ]
+}

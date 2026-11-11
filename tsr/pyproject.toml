@@ -1,0 +1,13 @@
+[project]
+name = "tsr"
+version = "0.1.0"
+description = "Save and restore Ghostty agent sessions on macOS"
+requires-python = ">=3.14"
+dependencies = []
+
+[project.scripts]
+tsr = "tsr:main"
+
+[build-system]
+requires = ["uv_build>=0.13.0,<0.14.0"]
+build-backend = "uv_build"

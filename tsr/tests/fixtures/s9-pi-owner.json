@@ -1,0 +1,1 @@
+{"probe":"S9 pi --resume","actor":"owner","action":"started picker in tools folder; cancelled without selecting","reported_result":"Pi quits when picker is cancelled","current_folder_heading_explicitly_reported":false,"scope":"interactive cancellation confirmed; default folder scope established by installed source"}

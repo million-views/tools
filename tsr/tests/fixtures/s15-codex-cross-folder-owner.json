@@ -1,0 +1,21 @@
+{
+  "source": "Owner-operated marker check and screenshots",
+  "kind": "UI excerpts and owner observations",
+  "command": "codex resume SESSION_PLACEHOLDER",
+  "original_folder": "/Users/USER/PROJECT_A",
+  "resume_folder": "/Users/USER/PROJECT_B",
+  "directory_choice": "Use current directory",
+  "observed_version": "0.167.1",
+  "resumed_ui_excerpt": {
+    "user_message": "PROMPT_PLACEHOLDER",
+    "assistant_message": "MARKER_PLACEHOLDER"
+  },
+  "owner_confirmed_marker_in_resumed_history": true,
+  "owner_reported_codex_update": true,
+  "cause_of_earlier_missing_history": "not established",
+  "limits": [
+    "Home paths, project names, prompt text and session ID were replaced.",
+    "This is owner-confirmed conversation continuity, not a passive frontend PID-to-session mapping.",
+    "The result does not establish behavior of earlier Codex versions."
+  ]
+}

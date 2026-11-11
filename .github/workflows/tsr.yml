@@ -1,0 +1,21 @@
+name: tsr
+on:
+  push:
+    paths: ["tsr/**", ".github/workflows/tsr.yml"]
+  pull_request:
+    paths: ["tsr/**", ".github/workflows/tsr.yml"]
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - name: Test without Ghostty or live agents
+        working-directory: tsr
+        env:
+          PYTHONPATH: src
+        run: python -m unittest discover -s tests -v

@@ -1,0 +1,89 @@
+{
+  "kind": "Aggregate live measurements; not a snapshot or real-agent restore acceptance",
+  "capture": {
+    "windows": 12,
+    "tabs": 65,
+    "capture_seconds": 2.78,
+    "subprocesses": [
+      "osascript",
+      "ps",
+      "lsof"
+    ],
+    "json_list_seconds": 0.000498,
+    "snapshot_mode": "0o600",
+    "state_mode": "0o700",
+    "roundtrip_id_matches": true
+  },
+  "desktop": {
+    "plain_restore_tabs": 3,
+    "ordered_cwds_match": true,
+    "current_terminal_preserved": true,
+    "special_character_cwd_matches": true,
+    "snapshot_unchanged": true,
+    "picker_process_observed": true,
+    "q_cancel_returned_to_shell": true,
+    "state_files_unchanged_on_cancel": true,
+    "new_terminal_shell_ready": true,
+    "harmless_command_completed": true,
+    "quoted_command_cwd_matches": true,
+    "real_agent_launched": false
+  },
+  "package": {
+    "transport": "temporary local git tag/subdirectory; not private SSH",
+    "version": "tsr 0.1.0",
+    "runtime": {
+      "python": "3.14.8",
+      "curses": true
+    },
+    "scoped_path_correct": true,
+    "initial_json_list": true,
+    "doctor_exit": 0,
+    "doctor_path_check_passed": true,
+    "uninstall_removed_entry_point": true,
+    "uninstall_preserved_snapshot": true,
+    "reinstall_read_existing_snapshot": true,
+    "final_uninstall_complete": true
+  },
+  "path_encoding_observations": [
+    {
+      "actual_name": "back\\slash",
+      "lsof_name": "back\\\\slash"
+    },
+    {
+      "actual_name": "line\nbreak",
+      "lsof_name": "line\\nbreak"
+    },
+    {
+      "actual_name": "tab\tname",
+      "lsof_name": "tab\\tname"
+    },
+    {
+      "actual_name": "literal^A",
+      "lsof_name": "literal^A"
+    },
+    {
+      "actual_name": "control\u0001",
+      "lsof_name": "control^A"
+    },
+    {
+      "actual_name": "unicode-é",
+      "lsof_name": "unicode-\\xc3\\xa9"
+    },
+    {
+      "actual_name": "literal\\n",
+      "lsof_name": "literal\\\\n"
+    }
+  ],
+  "limits": [
+    "Three plain-shell tabs and harmless typing were exercised, not real-agent resume through tsr.",
+    "No Mac restart, fresh-account Automation probe, private SSH install, or hosted CI run was performed.",
+    "Ghostty effective window-save-state remains uninspected and doctor reports that caveat.",
+    "No project commit, release tag, remote setup or push occurred."
+  ],
+  "availability": {
+    "exact_claude_rows_blocked": 11,
+    "codex_rows_warned": 3,
+    "real_agent_launches": 0
+  },
+  "outside_terminal_restore_exit": 3
+}

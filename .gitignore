@@ -1,0 +1,16 @@
+# macOS metadata and resource forks, at any depth.
+.DS_Store
+._*
+.AppleDouble/
+.LSOverride
+.Spotlight-V100/
+.Trashes/
+.fseventsd/
+.TemporaryItems/
+.DocumentRevisions-V100/
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.apdisk
+
+# Scratch directories or symlinks named tmp, at any depth.
+tmp

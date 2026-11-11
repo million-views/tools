@@ -1,0 +1,1 @@
+{"daemon_pid":32138,"frontend_pid_before":52277,"frontend_pid_after":52277,"lsof_exit_before":1,"lsof_exit_after":1,"lock_count_before":3,"lock_count_after":4,"old_test_lock_retained":true,"added_lock_count":1,"frontend_argv_still_names_old_session":true,"owner_action":"/new followed by a harmless prompt; then idle"}

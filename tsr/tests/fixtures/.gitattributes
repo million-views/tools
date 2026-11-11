@@ -1,0 +1,2 @@
+# Preserve the captured ps output's intentional trailing space.
+s3-processes.txt whitespace=-blank-at-eol

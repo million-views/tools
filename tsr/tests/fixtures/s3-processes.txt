@@ -1,0 +1,9 @@
+57974     1 ??       Fri Oct 30 21:13:54 2026     /Applications/Ghostty.app/Contents/MacOS/ghostty
+57981 57979 ttys000  Fri Oct 30 21:13:54 2026     -/opt/local/bin/bash --posix
+98382 57981 ttys000  Sat Oct 31 12:23:19 2026     claude --resume 00000000-0000-4000-8000-000000000001
+47265 47264 ttys004  Tue Nov 10 03:10:05 2026     -/opt/local/bin/bash --posix
+47743 47265 ttys004  Tue Nov 10 03:10:07 2026     pi 
+44853 44852 ttys024  Tue Nov 10 03:05:55 2026     -/opt/local/bin/bash --posix
+45265 44853 ttys024  Tue Nov 10 03:06:08 2026     /Users/USER/.nvm/versions/node/v26.13.0/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex
+58908 58907 ttys028  Fri Nov  6 10:21:33 2026     -/opt/local/bin/bash --posix
+60229 58908 ttys028  Fri Nov  6 10:57:05 2026     /Users/USER/.nvm/versions/node/v26.13.0/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex

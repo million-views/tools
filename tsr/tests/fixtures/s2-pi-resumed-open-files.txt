@@ -1,0 +1,53 @@
+p48674
+fcwd
+n/Users/USER/PROJECT
+ftxt
+n/Users/USER/.nvm/versions/node/v26.13.0/bin/node
+ftxt
+n/Library/Preferences/Logging/.plist-cache.QtcXcHSV
+ftxt
+n/usr/lib/dyld
+ftxt
+n/usr/share/icu/icudt78l.dat
+ftxt
+n/private/var/db/timezone/tz/2026d.1.0/icutz/icutz44l.dat
+f0
+n/dev/ttys004
+f1
+n/dev/ttys004
+f2
+n/dev/ttys004
+f3
+ncount=0, state=0x00000000
+f4
+n->0x00000000
+f5
+n->0x00000000
+f6
+n/
+f7
+ncount=0, state=0x00000000
+f8
+n/
+f9
+ncount=0, state=0x00000000
+f10
+n/
+f11
+n/dev/ttys004
+f12
+n/dev/null
+f13
+n->0x00000000
+f14
+n->0x00000000
+f15
+n/dev/ttys004
+f16
+n/dev/ttys004
+f17
+n
+f18
+n[ctl com.apple.netsrc id 7 unit 128]
+f20
+n->0x00000000
