@@ -2,6 +2,7 @@
 name = "tsr"
 version = "0.2.0"
 description = "Save and restore Ghostty agent sessions on macOS"
+license = "MIT"
 requires-python = ">=3.14"
 dependencies = []
 
