@@ -847,15 +847,15 @@ Implementation status as of 2026-11-10:
 
 | Area | Implemented | Remaining verification or work |
 | --- | --- | --- |
-| M0 evidence | Local probes, source checks and anonymized fixtures through S17 | Fresh-account S5, private S8 after publication, pi's exact heading and broader real-agent acceptance |
+| M0 evidence | Local probes, source checks and anonymized fixtures through S17 | Fresh-account S5, private S8 after a release tag, pi's exact heading and broader real-agent acceptance |
 | M1 capture/list | Private atomic snapshots/backups, adapters, labels, confidence, save/list; format-2 null cwd and mixed format readers; S17 foreground-cwd/encoding correction | Exact reference desktop and independent agent-reported IDs remain manual acceptance |
 | M2 restore | Availability, curses picker, pure planner, executor, locking/reservations and failure cleanup; contract tests and live plain-shell/typing checks | Full real-agent restore acceptance and live reference multi-window/race checks; Codex daemon query stays deferred |
-| M3 packaging/doctor | Doctor, section 7 package/entry point, actual isolated tagged production install/reinstall/uninstall, README and macOS CI configuration | Owner publication/release tag, private SSH/default-account install, fresh-account prompt and hosted CI execution; restart remains omitted |
+| M3 packaging/doctor | Doctor, section 7 package/entry point, actual isolated tagged production install/reinstall/uninstall, README and macOS CI configuration | Release tag, private SSH/default-account install, fresh-account prompt and hosted CI execution; restart remains omitted |
 
 Implementation is delivered; the full definition of done below is not yet
 satisfied. Manual acceptance, fresh-account checks, private publication and
-hosted CI cannot be replaced by local substitutes. Publication and release tags
-remain owner-managed.
+hosted CI cannot be replaced by local substitutes. The owner has set up and
+pushed the repository; release tagging remains owner-managed.
 
 ### Decisions (2026-11-10)
 
