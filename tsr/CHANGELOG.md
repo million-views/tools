@@ -2,8 +2,9 @@
 
 Notable user-facing features and compatibility changes.
 
-## [Unreleased]
+## [0.3.0] - 2026-11-11
 
+- Report Ghostty's configured window-save-state mode in `tsr doctor`.
 - Clarify `tsr doctor` session counts and group review items by window and tab.
 - Add a brief `tsr list` view that omits prompt text and recovery commands.
 - Limit the `tsr restore` picker to a selected saved window.

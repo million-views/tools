@@ -1,0 +1,9 @@
+# Sanitized excerpt; only window-save-state results retained.
+# Ghostty 1.4.0
+ghostty +show-config --default --no-pager: exit 0
+window-save-state = default
+ghostty +show-config --no-pager: exit 0; setting omitted (default)
+defaults read -g NSQuitAlwaysKeepsWindows: unset (exit 1)
+defaults read com.mitchellh.ghostty NSQuitAlwaysKeepsWindows: unset (exit 1)
+defaults read com.apple.systempreferences NSQuitAlwaysKeepsWindows: unset (exit 1)
+Ghostty process during inspection: not running

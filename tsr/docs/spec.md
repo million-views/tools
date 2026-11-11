@@ -128,6 +128,7 @@ The reproducible procedure and pending checks are in [m0.md](m0.md).
 | F54 | S17: local lsof field output doubles literal backslashes, emits newline/tab as C escapes and UTF-8 bytes under C locale as hexadecimal escapes. A controlled seven-directory probe measured those forms and preserved literal backslash-n distinctly. Literal `^A` and a control-byte representation can be ambiguous without other evidence; do not decode caret forms into an invented path. The local lsof manual documents C/control/hex output forms. | [Measured encoding outputs](../tests/fixtures/v1-verification.json); `/usr/share/man/man8/lsof.8`, OUTPUT section |
 | F55 | Final local implementation checks: capture returned 12 windows / 65 tabs in 2.780 s with exactly osascript, ps and lsof. Actual Ghostty restored three plain-shell tabs in order, preserved the first terminal, handled a quoted/backslash folder, cancelled on q without changing state, and executed a harmless quoted marker command. Live availability blocked 11 exact Claude rows and warned on 3 Codex rows. No real agent was launched through tsr by these checks. | [Anonymized measurements](../tests/fixtures/v1-verification.json), [coverage/limits](v1.md) |
 | F56 | The production package, copied into a temporary git repository/tag, installed via uv's local tagged-subdirectory transport with managed Python 3.14.8/curses. Scoped PATH and doctor passed. Uninstall retained a snapshot; reinstall read it; final uninstall removed the isolated executable. The public SSH/default-user install path was not tested. | [Measurements](../tests/fixtures/v1-verification.json), [reproducible probe](../scripts/v1-install.py) |
+| F57 | S18: Ghostty 1.4.0 supports `ghostty +show-config --no-pager`; it exits 0 and prints non-default settings, omitting settings at their defaults. `--default` printed `window-save-state = default`; the current query omitted that setting, so the configured value resolves to `default`. Read-only `defaults` queries for the global, Ghostty and System Preferences domains found no `NSQuitAlwaysKeepsWindows` value. Ghostty was not running during inspection. The CLI reports Ghostty's configured mode, not the system-wide behavior selected when the mode is `default`; launch-time CLI overrides and effective macOS policy were not measured. Ghostty documents that systemwide behavior is controlled through Settings.app; Apple documents the related UI under System Settings → Desktop & Dock → Close windows when quitting an application. No supported command-line read of that setting was verified. | [Sanitized query results](../tests/fixtures/s18-window-save-state.txt), [Ghostty config docs](https://ghostty.org/docs/config), [option reference](https://ghostty.org/docs/config/reference#window-save-state), [Apple Support](https://support.apple.com/en-ie/102318) |
 
 CHECK 2 method: time five sequential runs of the M1 Runner's
 `ps -A -ww -o pid=,ppid=,tty=,lstart=,args=` with `LC_ALL=C TZ=UTC`, parse
@@ -228,7 +229,7 @@ Nothing else changes between formats, and `restored.json` remains independent.
   "saved_at": "2026-11-10T17:42:05Z",
   "boot_time": 1762700000,
   "host": "example-mac",
-  "tsr_version": "0.2.0",
+  "tsr_version": "0.3.0",
   "terminal": { "app": "ghostty", "version": "1.4.0" },
   "windows": [
     {
@@ -572,7 +573,7 @@ tsr has no install command of its own: uv installs, upgrades and removes it, and
 | Job | Command |
 | --- | --- |
 | Prerequisite (once) | `sudo port install uv` (F22) |
-| Install a release | `uv tool install "git+ssh://git@github.com/million-views/tools@tsr-v0.2.0#subdirectory=tsr"` |
+| Install a release | `uv tool install "git+ssh://git@github.com/million-views/tools@tsr-v0.3.0#subdirectory=tsr"` |
 | Move to another release | the same command with the new tag and `--force` |
 | Uninstall | `uv tool uninstall tsr` (snapshots stay; remove them with `rm -rf ~/.local/state/tsr`) |
 | Run from a checkout, for development | `uv run tsr …` inside `tsr/` |
@@ -604,7 +605,7 @@ One line per check: `✓`, `⚠` (works, with a caveat) or `✗` (broken), with 
 | Ghostty 1.4+ | ✗ if older (F9) | Update Ghostty |
 | Automation permission | ✗ on `-1743` (F5) | System Settings → Privacy & Security → Automation → allow the app that runs tsr (usually Ghostty itself) to control Ghostty (spike S5) |
 | Session identification | Runs a capture without saving; reports the exact count and the number of likely/picker sessions to review | When any need review, explains that exact sessions are counted but omitted from the details, then groups the review list by numbered window and numbers the likely/picker tabs under each window, with agent and confidence. If none need review, says so. |
-| `window-save-state` | ⚠ when effective value is uninspected; never guess it | If `always` (F6), Ghostty may reopen old shells too. Inspect the setting yourself; tsr does not change it |
+| `window-save-state` | Read Ghostty's supported `+show-config` output and report `always`, `never`, or `default`; ⚠ if Ghostty is unavailable or the query fails. `default` does not reveal the effective system-wide macOS window policy (F57). | For `always`, Ghostty may reopen saved shells too. For `default`, point to System Settings → Desktop & Dock → Close windows when quitting an application. tsr does not change either setting. If the query is unavailable, report it as unknown; never guess. |
 | Snapshot | Shows age and counts; ⚠ if there is none | `tsr save` before restarting |
 
 ## 8. Architecture and extension points
@@ -783,6 +784,11 @@ Each is a test the implementation must pass on a real Mac with Ghostty 1.4. The 
 - **AC-24** `tsr restore --window N` shows only that saved window in the picker;
   the user can still review availability and select tabs before launch. A
   window number absent from the chosen snapshot produces a clear error.
+- **AC-25** `tsr doctor` reads Ghostty's configured `window-save-state` through
+  `+show-config` and reports `always`, `never`, or `default`. It warns that
+  `always` may reopen saved windows and directs users to the macOS window
+  setting when the configured mode is `default`. If Ghostty's CLI is missing
+  or the query fails, it reports the mode as unknown without guessing.
 
 ## 11. Testing plan
 
@@ -841,6 +847,7 @@ These confirm things the design assumes but no source states outright. Run them 
 | S15 (complete) | Does explicit Codex resume cross folders, and what folder/worktree evidence supports warnings? | Owner-confirmed marker continuity passed for Codex 0.167.1 (F49); the Git relationship is documented in F52 and contract-tested. Missing-cwd rechecks retain or broaden uncertainty. | Codex warnings are agent-wide; missing folder evidence never proves availability. |
 | S16 (CHECK 3 measured; strict rule answered no) | Does a tsr-created terminal's tty plus agent process start reliably confirm a reserved launch and its lifecycle, including the current-tab exec case? | Owner-approved two-tab probe: normal Codex launch in A, shell-level exec via a recording Python helper in B, owner quit, then read-only exit checks. Tty association and pre-exec PID/start continuity worked for Codex 0.167.1; both recorded identities disappeared on exit (F50). Strict start-after-reservation failed for exec and same-second timing (F51). The isolated probe shells initially lacked nvm PATH; temporary exports fixed only those tabs. B required Enter to close after owner quit. | The adopted confirmation rule and remaining limits are in section 4. This probe did not exercise M2 or its actual reservation file. Validate the normal tsr-under-parent-shell handoff, agent launcher variants and stale/reuse cases before claiming that broader coverage; keep existing format-1 snapshots readable. |
 | S17 (complete) | Can the Ghostty cwd be stale after exec, and how does lsof encode paths? | Actual plain-shell restore/read-only follow-up found a stale nonempty getter and measured seven path cases (F53–F54). Foreground-cwd preference and decoding then produced all three expected folders. | Ambiguous caret/control forms yield null cwd and a save warning rather than an invented path. |
+| S18 (complete; configured mode only) | Can `doctor` read Ghostty's `window-save-state` through a supported, read-only interface, and does that reveal the effective macOS policy? | On Ghostty 1.4.0, `ghostty +show-config --default --no-pager` returned `window-save-state = default`; `ghostty +show-config --no-pager` omitted it, indicating the current configured value is the default. Read-only preference queries found no `NSQuitAlwaysKeepsWindows` value in the checked domains. Ghostty was not running, so launch-time arguments were unavailable. The Ghostty CLI reports its configured mode; it does not report the separate macOS policy used when mode is `default`. | Query the setting in `doctor`, distinguish `default` from `always`/`never`, and point users to System Settings → Desktop & Dock → Close windows when quitting an application when it is `default`. If the CLI query fails, report unknown and retain the restart caution; do not infer or alter macOS preferences. |
 
 ## 13. Milestones and definition of done
 
@@ -854,10 +861,10 @@ Implementation status and remaining acceptance:
 
 | Area | Implemented | Remaining verification or work |
 | --- | --- | --- |
-| M0 evidence | Local probes, source checks and anonymized fixtures through S17 | Fresh-account S5, public S8 release-tag install/default PATH, pi's exact heading and broader real-agent acceptance |
+| M0 evidence | Local probes, source checks and anonymized fixtures through S18 | Fresh-account S5, public S8 release-tag install/default PATH, pi's exact heading and broader real-agent acceptance; system-wide window restoration under `default` remains unresolved |
 | M1 capture/list | Private atomic snapshots/backups, adapters, labels, confidence, save/list; format-2 null cwd and mixed format readers; S17 foreground-cwd/encoding correction | Exact reference desktop and independent agent-reported IDs remain manual acceptance |
 | M2 restore | Availability, curses picker, pure planner, executor, locking/reservations and failure cleanup; contract tests and live plain-shell/typing checks | Full real-agent restore acceptance and live reference multi-window/race checks; Codex daemon query stays deferred |
-| M3 packaging/doctor | Doctor, section 7 package/entry point, actual isolated tagged production install/reinstall/uninstall, README and macOS CI configuration | Validate release-tag installation, fresh-account prompt and hosted CI; restart remains omitted |
+| M3 packaging/doctor | Doctor reports Ghostty's configured `window-save-state` mode, section 7 package/entry point, actual isolated tagged production install/reinstall/uninstall, README and macOS CI configuration | Configured `default` does not establish system-wide restoration behavior. Also validate release-tag installation, fresh-account prompt and hosted CI; restart remains omitted |
 
 Implementation is delivered; the full definition of done below is not yet
 satisfied. Manual acceptance, fresh-account checks, release-tag installation and
@@ -946,3 +953,8 @@ is free. See [S11](s11.md) for the evidence and limits.
   other-agent launch forms and deliberate stale/reuse cases remain unverified.
   Full real-agent restore acceptance remains manual; approved plain-shell and
   harmless-command desktop checks passed (F55). Never restart the Mac.
+- **S18 residual:** `+show-config` reads Ghostty's configured mode, but does not
+  resolve the macOS system policy when that mode is `default`. The owner must
+  check System Settings → Desktop & Dock → Close windows when quitting an
+  application before relying on Ghostty's default restore behavior. No
+  read-only command for that UI setting was verified (F57).

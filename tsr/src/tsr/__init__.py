@@ -26,7 +26,7 @@ import time
 from typing import Protocol
 import uuid
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 FORMAT = 2
 SESSION_ID = re.compile(r"[A-Za-z0-9._:-]{6,128}\Z")
 AUTOMATION_FIX = "System Settings → Privacy & Security → Automation → allow the requesting app to control Ghostty"
@@ -219,6 +219,19 @@ class Transcript:
     first_timestamp: float
     mtime: float
     description: Description
+
+
+@dataclass(frozen=True)
+class TranscriptFacts:
+    session_id: str | None = None
+    cwd: str | None = None
+    first_timestamp: float = 0.0
+    prompt: str | None = None
+    branch: str | None = None
+
+    @property
+    def complete(self) -> bool:
+        return bool(self.session_id and self.cwd and self.first_timestamp and self.prompt is not None)
 
 
 # store: only tsr-owned paths are writable; new current is always staged first.
@@ -583,6 +596,45 @@ def prompt_text(content: object) -> str | None:
     return " ".join("".join(c if c.isprintable() else " " for c in text).split())[:200] or None
 
 
+def transcript_facts(name: str, obj: dict, facts: TranscriptFacts) -> TranscriptFacts:
+    """Purely fold one decoded agent record into the transcript summary."""
+    kind = obj.get("type")
+    record = obj.get("payload", {}) if name == "codex" else obj
+    if not isinstance(record, dict):
+        return facts
+    session_id, cwd, branch = facts.session_id, facts.cwd, facts.branch
+    identity_record = (name == "claude" or name == "codex" and kind == "session_meta" or
+                       name == "pi" and kind == "session")
+    if identity_record:
+        sid = record.get("sessionId") if name == "claude" else record.get("id") or record.get("session_id")
+        if session_id is None and isinstance(sid, str) and SESSION_ID.fullmatch(sid):
+            session_id = sid
+        if cwd is None and isinstance(record.get("cwd"), str):
+            cwd = record["cwd"]
+        git = record.get("git")
+        branch_value = record.get("gitBranch") or (git.get("branch") if isinstance(git, dict) else None)
+        if branch is None and isinstance(branch_value, str):
+            branch = branch_value
+    first = facts.first_timestamp or timestamp(record.get("timestamp")) or timestamp(obj.get("timestamp"))
+    message = obj.get("message") if name != "codex" else record
+    user = ((name == "claude" and kind == "user") or
+            (name == "pi" and kind == "message") or
+            (name == "codex" and kind == "response_item"))
+    prompt = facts.prompt
+    if prompt is None and user and isinstance(message, dict) and message.get("role") == "user":
+        prompt = prompt_text(message.get("content"))
+    return TranscriptFacts(session_id, cwd, first, prompt, branch)
+
+
+def build_transcript(name: str, path: Path, mtime: float, facts: TranscriptFacts) -> Transcript | None:
+    """Turn parsed transcript facts into the domain value without reading files or clocks."""
+    if facts.session_id is None:
+        return None
+    return Transcript(SessionRef(name, facts.session_id, str(path)), facts.cwd,
+                      facts.first_timestamp or mtime, mtime,
+                      Description(facts.prompt, facts.branch))
+
+
 def read_records(path: Path):
     with path.open() as stream:
         for line in islice(stream, 200):
@@ -638,39 +690,12 @@ class TranscriptAgent:
         cached = self._cache.get(path)
         if cached and cached[0] == stat.st_mtime_ns:
             return cached[1]
-        session_id, cwd, first, prompt, branch = None, None, 0.0, None, None
+        facts = TranscriptFacts()
         for obj in read_records(path):
-            kind = obj.get("type")
-            record = obj.get("payload", {}) if self.name == "codex" else obj
-            if not isinstance(record, dict):
-                continue
-            identity_record = (self.name == "claude" or
-                               self.name == "codex" and kind == "session_meta" or
-                               self.name == "pi" and kind == "session")
-            if identity_record:
-                sid = record.get("sessionId") if self.name == "claude" else record.get("id") or record.get("session_id")
-                if session_id is None and isinstance(sid, str) and SESSION_ID.fullmatch(sid):
-                    session_id = sid
-                if cwd is None and isinstance(record.get("cwd"), str):
-                    cwd = record["cwd"]
-                git = record.get("git")
-                branch_value = record.get("gitBranch") or (git.get("branch") if isinstance(git, dict) else None)
-                if branch is None and isinstance(branch_value, str):
-                    branch = branch_value
-            if not first:
-                first = timestamp(record.get("timestamp")) or timestamp(obj.get("timestamp"))
-            message = obj.get("message") if self.name != "codex" else record
-            user = ((self.name == "claude" and kind == "user") or
-                    (self.name == "pi" and kind == "message") or
-                    (self.name == "codex" and kind == "response_item"))
-            if prompt is None and user and isinstance(message, dict) and message.get("role") == "user":
-                prompt = prompt_text(message.get("content"))
-            if session_id and cwd and first and prompt is not None:
+            facts = transcript_facts(self.name, obj, facts)
+            if facts.complete:
                 break
-        result = None
-        if session_id is not None:
-            result = Transcript(SessionRef(self.name, session_id, str(path)), cwd, first or stat.st_mtime,
-                                stat.st_mtime, Description(prompt, branch))
+        result = build_transcript(self.name, path, stat.st_mtime, facts)
         self._cache[path] = (stat.st_mtime_ns, result)
         return result
 
@@ -922,6 +947,23 @@ def default_agents(home: Path, environment: dict[str, str]) -> tuple[AgentAdapte
     return ClaudeAdapter(home), CodexAdapter(home), PiAdapter(home, environment)
 
 
+def read_direct_identification(adapter: AgentAdapter, process: Process,
+                               paths: tuple[str, ...]) -> Identification | None:
+    """Read identity sources in priority order; failures degrade to the next source."""
+    for method, confidence, read in (
+        ("live-metadata", "exact", lambda: adapter.session_from_runtime(process.pid, process.start_utc)),
+        ("open-file", "exact", lambda: adapter.session_from_open_files(paths)),
+        ("argv", "likely", lambda: adapter.session_from_argv(process.command_text)),
+    ):
+        try:
+            ref = read()
+            if ref:
+                return Identification(ref, confidence, method)
+        except (OSError, ValueError, TypeError, KeyError):
+            logging.getLogger("tsr").debug("Session evidence unavailable", exc_info=True)
+    return None
+
+
 def repository_root(cwd: str) -> str | None:
     path = Path(cwd)
     for parent in (path, *path.parents):
@@ -986,29 +1028,18 @@ def capture(runner: Runner, home: Path, environment: dict[str, str], *,
         else:
             folder = None
         folders[pane.terminal_id] = folder
-        if not match or not folder:
+        if not match:
             continue
         process, adapter = match
         paths = tuple(path for pid in descendants(process.pid, processes) for path in opened.paths.get(pid, ()))
-        evidence = []
-        for method, confidence, read in (
-            ("live-metadata", "exact", lambda: adapter.session_from_runtime(process.pid, process.start_utc)),
-            ("open-file", "exact", lambda: adapter.session_from_open_files(paths)),
-            ("argv", "likely", lambda: adapter.session_from_argv(process.command_text)),
-        ):
-            try:
-                ref = read()
-                if ref:
-                    evidence.append(Identification(ref, confidence, method))
-                    break
-            except (OSError, ValueError, TypeError, KeyError):
-                logging.getLogger("tsr").debug("Session evidence unavailable", exc_info=True)
-        observations.append(Observation(pane.terminal_id, adapter.name, folder, process, tuple(evidence)))
+        direct = read_direct_identification(adapter, process, paths)
+        observations.append(Observation(pane.terminal_id, adapter.name, folder or "", process,
+                                        (direct,) if direct else ()))
     candidates = {}
     for adapter in adapters:
         groups: dict[str, list[Observation]] = defaultdict(list)
         for o in observations:
-            if o.agent == adapter.name and not o.evidence:
+            if o.agent == adapter.name and o.cwd and not o.evidence:
                 groups[o.cwd].append(o)
         for folder, group in groups.items():
             try:
@@ -1016,26 +1047,6 @@ def capture(runner: Runner, home: Path, environment: dict[str, str], *,
             except (OSError, ValueError, TypeError, KeyError):
                 candidates[(adapter.name, folder)] = ()
     identifications = identify(tuple(observations), candidates)
-    for pane in panes:
-        match = selected.get(pane.terminal_id)
-        if not match or folders[pane.terminal_id]:
-            continue
-        process, adapter = match
-        chosen = None
-        for read, confidence, method in (
-            (lambda: adapter.session_from_runtime(process.pid, process.start_utc), "exact", "live-metadata"),
-            (lambda: adapter.session_from_open_files(tuple(path for child in descendants(process.pid, processes)
-                                                           for path in opened.paths.get(child, ()))), "exact", "open-file"),
-            (lambda: adapter.session_from_argv(process.command_text), "likely", "argv"),
-        ):
-            try:
-                ref = read()
-                if ref:
-                    chosen = Identification(ref, confidence, method)
-                    break
-            except (OSError, ValueError, TypeError, KeyError):
-                logging.getLogger("tsr").debug("Session evidence unavailable", exc_info=True)
-        identifications[pane.terminal_id] = chosen or Identification(None, "picker", "none")
     captured = []
     for window in windows:
         tabs = []
@@ -1065,7 +1076,7 @@ def capture(runner: Runner, home: Path, environment: dict[str, str], *,
                     __version__, {"app": terminal.name, "version": terminal.version}, labeled)
 
 
-# restore: immutable inputs and pure availability/planning decisions.
+# restore: immutable state; shell-prepared facts feed the pure planner/availability rules.
 @dataclass(frozen=True)
 class LiveAgent:
     name: str
@@ -1177,11 +1188,23 @@ class RestoreRow:
         return SessionRef(a.name, a.session_id, a.session_file) if a else None
 
 
-def restore_rows(snapshot: Snapshot, adapters: tuple[AgentAdapter, ...], shell: str) -> tuple[RestoreRow, ...]:
-    registry = {a.name: a for a in adapters}
-    counts = Counter((p.agent.name, os.path.realpath(p.cwd))
-                     for w in snapshot.windows for t in w.tabs for p in t.panes
-                     if p.cwd and p.agent and p.agent.method == "recent-transcript")
+@dataclass(frozen=True)
+class ResumeOption:
+    valid: bool
+    argv: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class AgentRestoreInput:
+    display: str
+    picker_argv: tuple[str, ...]
+    options: dict[tuple[str | None, str | None], ResumeOption]
+
+
+def plan_restore_rows(snapshot: Snapshot, shell: str,
+                      agent_inputs: dict[str, AgentRestoreInput],
+                      recent_counts: Counter) -> tuple[RestoreRow, ...]:
+    """Build restore rows from captured facts; this function performs no I/O."""
     rows = []
     for wi, w in enumerate(snapshot.windows):
         for ti, t in enumerate(w.tabs):
@@ -1191,25 +1214,58 @@ def restore_rows(snapshot: Snapshot, adapters: tuple[AgentAdapter, ...], shell: 
                 launch_ref = None
                 if p.agent:
                     a = p.agent
-                    adapter = registry.get(a.name)
-                    if adapter is None:
+                    agent = agent_inputs.get(a.name)
+                    if agent is None:
                         argv, note = (), "agent unsupported; upgrade tsr"
                     else:
+                        ref_key = (a.session_id, a.session_file)
+                        option = agent.options.get(ref_key)
                         ambiguous = bool(p.cwd and a.method == "recent-transcript" and
-                                         counts[(a.name, os.path.realpath(p.cwd))] > 1)
-                        valid = adapter.valid_ref(SessionRef(a.name, a.session_id, a.session_file))
-                        picker = a.confidence == "picker" or ambiguous or not valid
+                                         recent_counts[(a.name, p.cwd)] > 1)
+                        picker = a.confidence == "picker" or ambiguous or not option or not option.valid
                         if not picker:
                             launch_ref = SessionRef(a.name, a.session_id, a.session_file)
-                        argv = adapter.resume_argv(launch_ref)
+                        argv = agent.picker_argv if picker else option.argv
                         # Never execute arbitrary saved executable/flags: accept only
                         # the adapter's validated canonical command or its downgrade.
                         if picker:
-                            note = ("ambiguous · " if ambiguous else "") + f"opens {adapter.display}'s picker"
+                            note = ("ambiguous · " if ambiguous else "") + f"opens {agent.display}'s picker"
                         elif a.confidence != "exact":
                             note = "likely"
                 rows.append(RestoreRow(key, w.index, t.index, pi + 1, w.label, p, argv, note, launch_ref))
     return tuple(rows)
+
+
+def restore_rows(snapshot: Snapshot, adapters: tuple[AgentAdapter, ...], shell: str) -> tuple[RestoreRow, ...]:
+    """Gather adapter-dependent validation, then invoke the pure row planner."""
+    registry = {adapter.name: adapter for adapter in adapters}
+    refs: dict[str, set[tuple[str | None, str | None]]] = defaultdict(set)
+    for window in snapshot.windows:
+        for tab in window.tabs:
+            for pane in tab.panes:
+                if pane.agent:
+                    refs[pane.agent.name].add((pane.agent.session_id, pane.agent.session_file))
+    agent_inputs = {}
+    for name, adapter in registry.items():
+        picker_argv = adapter.resume_argv(None)
+        options = {}
+        for session_id, session_file in refs.get(name, ()):
+            ref = SessionRef(name, session_id, session_file)
+            valid = adapter.valid_ref(ref)
+            options[(session_id, session_file)] = ResumeOption(
+                valid, adapter.resume_argv(ref) if valid else picker_argv)
+        agent_inputs[name] = AgentRestoreInput(adapter.display, picker_argv, options)
+    canonical_counts = Counter((pane.agent.name, os.path.realpath(pane.cwd))
+                               for window in snapshot.windows for tab in window.tabs for pane in tab.panes
+                               if pane.cwd and pane.agent and pane.agent.method == "recent-transcript")
+    recent_counts = Counter()
+    for window in snapshot.windows:
+        for tab in window.tabs:
+            for pane in tab.panes:
+                if pane.cwd and pane.agent and pane.agent.method == "recent-transcript":
+                    recent_counts[(pane.agent.name, pane.cwd)] = canonical_counts[
+                        (pane.agent.name, os.path.realpath(pane.cwd))]
+    return plan_restore_rows(snapshot, shell, agent_inputs, recent_counts)
 
 
 def common_repository(folder: str) -> str | None:
@@ -1737,7 +1793,26 @@ def doctor(store: Store, runner: Runner, home: Path, environment: dict[str, str]
         if not warning and exc.code == 3:
             precondition_code = 3
         report("⚠" if warning else "✗", "Ghostty/Automation", str(exc))
-    report("⚠", "window-save-state", "effective setting not inspected; if always, Ghostty may reopen saved shells too")
+    ghostty = shutil.which("ghostty", path=environment.get("PATH", os.defpath))
+    if not ghostty:
+        report("⚠", "window-save-state", "couldn't inspect; Ghostty CLI not found on PATH")
+    else:
+        try:
+            config = runner.run([ghostty, "+show-config", "--no-pager"])
+            if config.returncode != 0:
+                raise TsrError("Ghostty config query failed")
+            matches = re.findall(r"^\s*window-save-state\s*=\s*(\S+)\s*$", config.stdout, re.MULTILINE)
+            mode = matches[-1] if matches else "default"
+            if mode == "always":
+                report("⚠", "window-save-state", "always · Ghostty may reopen saved windows on exit")
+            elif mode == "never":
+                report("✓", "window-save-state", "never · Ghostty window-state saving is disabled")
+            elif mode == "default":
+                report("⚠", "window-save-state", "default · macOS policy applies; check System Settings → Desktop & Dock → Close windows when quitting an application")
+            else:
+                report("⚠", "window-save-state", f"couldn't inspect; unsupported value {mode!r}")
+        except TsrError:
+            report("⚠", "window-save-state", "couldn't inspect; Ghostty config query failed")
     try:
         snapshot = store.load(required=False)
         if snapshot:
