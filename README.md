@@ -1,31 +1,24 @@
 # Tools
 
-Independent tools, each with its own source, documentation, tests and packaging.
-Run development commands from the tool's directory.
+This repository is a home for small, independently maintained tools. Each
+tool owns its implementation, documentation, tests and development workflow.
 
-| Tool | Purpose | Documentation |
-| --- | --- | --- |
-| [tsr](tsr/) | Save and restore Ghostty windows, folders and agent sessions on macOS | [Usage](tsr/README.md), [spec](tsr/docs/spec.md), [verification and remaining acceptance](tsr/docs/v1.md) |
+## Projects
 
-To work on tsr, use Python 3.14+ and uv:
+### [tsr](tsr/README.md)
 
-```sh
-cd tsr
-uv run tsr --help
-uv run python -m unittest discover -s tests -v
-```
+Save and restore Ghostty windows, folders and agent sessions on macOS.
 
-Read a tool's `AGENTS.md` before changing it. Do not run desktop probes without
-the owner's permission; they can create windows or send terminal input.
+## Repository conventions
 
-Use a `tmp/` folder within each tool for scratch notes, drafts and local outputs.
-Directories and symlinks named `tmp` are ignored at any depth. Keep source,
-documentation and anonymized test fixtures outside scratch folders.
-
-The root `.gitignore` covers macOS metadata and scratch folders. Each tool owns
-language-specific ignores; tsr's covers Python environments, caches and build
-artifacts. Keep reproducibility files such as `uv.lock` tracked.
-
-Publication, repository access and release tags are owner-managed. This initial
-checkout includes implementation and local verification; see each tool's report
-for acceptance checks that still require external environments.
+- Work from the tool's directory and follow its `AGENTS.md` and project docs.
+- Give each tool its own `CHANGELOG.md`; record only notable user-facing
+  features and breaking changes, without implementation rationale or process
+  notes.
+- Keep each tool's runtime, dependencies, tests and language-specific ignore
+  rules with that tool. Track lockfiles when the tool uses them.
+- Use a `tmp/` directory inside a tool for scratch files. Any file, directory
+  or symlink named `tmp` is ignored at every depth; do not keep source or
+  durable documentation there.
+- The root `.gitignore` handles macOS metadata. Project ignore files handle
+  generated files for their respective languages and build tools.
