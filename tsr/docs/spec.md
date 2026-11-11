@@ -603,7 +603,7 @@ One line per check: `✓`, `⚠` (works, with a caveat) or `✗` (broken), with 
 | Ghostty running | ⚠ if not | Open Ghostty and re-run |
 | Ghostty 1.4+ | ✗ if older (F9) | Update Ghostty |
 | Automation permission | ✗ on `-1743` (F5) | System Settings → Privacy & Security → Automation → allow the app that runs tsr (usually Ghostty itself) to control Ghostty (spike S5) |
-| Session identification | Runs a capture without saving and reports how many running sessions are `exact`, `likely` and `picker`; ⚠ if any aren't `exact` | Lists those tabs, so the user knows which to check before restarting |
+| Session identification | Runs a capture without saving; reports the exact count and the number of likely/picker sessions to review | When any need review, explains that exact sessions are counted but omitted from the details, then groups the review list by numbered window and numbers the likely/picker tabs under each window, with agent and confidence. If none need review, says so. |
 | `window-save-state` | ⚠ when effective value is uninspected; never guess it | If `always` (F6), Ghostty may reopen old shells too. Inspect the setting yourself; tsr does not change it |
 | Snapshot | Shows age and counts; ⚠ if there is none | `tsr save` before restarting |
 

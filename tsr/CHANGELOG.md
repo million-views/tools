@@ -2,6 +2,10 @@
 
 Notable user-facing features and compatibility changes.
 
+## [Unreleased]
+
+- Clarify `tsr doctor` session counts and group review items by window and tab.
+
 ## [0.2.0] - 2026-11-10
 
 - Save panes with unknown folders and identify them in list and restore views.

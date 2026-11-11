@@ -1704,13 +1704,28 @@ def doctor(store: Store, runner: Runner, home: Path, environment: dict[str, str]
         report("✓", "Ghostty", "running · " + live.snapshot.terminal["version"])
         report("✓", "Automation", "layout read succeeded")
         counts = Counter(p.agent.confidence for w in live.snapshot.windows for t in w.tabs for p in t.panes if p.agent)
-        report("⚠" if counts["likely"] or counts["picker"] else "✓", "Session identification",
-               f"{counts['exact']} exact · {counts['likely']} likely · {counts['picker']} picker")
+        review_count = counts["likely"] + counts["picker"]
+        review_groups = []
         for w in live.snapshot.windows:
+            tabs = []
             for t in w.tabs:
-                for p in t.panes:
-                    if p.agent and p.agent.confidence != "exact":
-                        report("⚠", f"window {w.index}, tab {t.index}", f"{p.agent.name} · {p.agent.confidence} · verify before restart")
+                panes = [p for p in t.panes if p.agent and p.agent.confidence != "exact"]
+                if panes:
+                    tabs.append((t.index, panes))
+            review_groups.append((w.index, tabs))
+        review_groups = [(window_index, tabs) for window_index, tabs in review_groups if tabs]
+        if review_count:
+            report("⚠", "Session identification",
+                   f"{counts['exact']} exact · {review_count} to review ({counts['likely']} likely · {counts['picker']} picker)")
+            print("  Exact sessions are counted above but aren't listed individually.")
+            print("  Review before restarting:")
+            for window_number, (window_index, tabs) in enumerate(review_groups, 1):
+                print(f"    {window_number}. Window {window_index}")
+                for tab_number, (tab_index, panes) in enumerate(tabs, 1):
+                    sessions = ", ".join(f"{pane.agent.name} ({pane.agent.confidence})" for pane in panes)
+                    print(f"      {tab_number}. Tab {tab_index} · {sessions} · verify before restart")
+        else:
+            report("✓", "Session identification", f"{counts['exact']} exact · none need review")
     except TsrError as exc:
         warning = "not running" in str(exc) or "nothing to save" in str(exc)
         if not warning and exc.code == 3:
