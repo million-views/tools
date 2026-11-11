@@ -135,4 +135,5 @@ See [the spec](docs/spec.md) for behavior and [verification](docs/v1.md) for
 coverage and remaining acceptance work. [M0](docs/m0.md), [M1](docs/m1.md) and
 [S11](docs/s11.md) are historical evidence reports, not current implementation
 instructions. See the [changelog](CHANGELOG.md) for notable releases.
-Private-repository installation awaits owner publication.
+Install from a private release tag with the user's repository access. For local
+use before a release, install from the project directory as shown above.
