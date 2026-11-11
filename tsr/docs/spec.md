@@ -12,7 +12,7 @@ This spec is written for a coding agent (Claude Code or Codex) to implement. Eve
 
 The user has many Ghostty windows with many agent sessions running, and has to restart the Mac.
 
-1. Before restarting: `tsr save`. It records each window, its tabs in order, each tab's folder, and the agent session running in it.
+1. Before restarting: `tsr save`. It records each window, its tabs in order, each known folder, and the agent session running in it. A folder it cannot determine is saved as unknown.
 2. After restarting: open a fresh Ghostty window and run `tsr restore`. A picker shows the saved windows with their tabs.
 3. Pick a window or some of its tabs. tsr rebuilds them in the current window: the first selected tab runs in this tab, the rest open as new tabs after it, each resuming its session in its folder.
 4. Open another window and repeat. Restore never duplicates a session it can verify as running; for sessions it can't verify, it says so before you pick them. v1 covers sessions running in Ghostty for the current user, plus sessions tsr restored itself (section 6).
@@ -154,7 +154,7 @@ Four commands. Installing and removing tsr is uv's job (section 7). Nothing else
 | --- | --- |
 | `tsr save [--yes]` | Capture all Ghostty windows, tabs, folders and agent sessions; print what was captured. Replaces the current snapshot and keeps the previous one as a backup. Print "Saved. Restart when ready." The proposed `--restart` is deferred under S6's fallback (F27). |
 | `tsr restore [--backup]` | Open the picker (section 6) and rebuild saved windows or tabs into the window tsr runs in. `--backup` uses the previous snapshot. |
-| `tsr list [--json] [--backup]` | Print the saved windows and tabs without the picker, with each tab's folder and resume command, so a window can be rebuilt by hand if needed. |
+| `tsr list [--json] [--backup]` | Print the saved windows and tabs without the picker, with each known folder and recovery command, so a window can be rebuilt by hand if needed. Unknown folders show `(folder unknown)` and have no recovery command; JSON contains null cwd. |
 | `tsr doctor` | Check what tsr depends on (section 7). |
 
 Plus `tsr --help` and `tsr --version`. Exit codes: `0` success, `1` runtime error, `2` usage error, `3` precondition not met (not in Ghostty, Ghostty too old, Automation denied, no snapshot), each with a one-line fix.
@@ -178,8 +178,11 @@ Window 2 · web
 
 The last column says how the session was identified (section 5): **exact** (validated live process metadata, or the agent process has that transcript open), **likely** (from the command line or recent activity), or **picker** (agent found, session not identified; restore opens that agent's own picker for that folder). Anything other than "exact" is the user's cue to check before restarting. Restore retains command-line likely resumes and single-pane recent-transcript likely resumes; multiple recent-transcript panes in the same agent/folder group are downgraded to `ambiguous · opens <agent>'s picker` (section 6). These are derived display/execution rules, not new snapshot confidence values.
 
-An unresolved folder fails save and preserves the snapshots. The deferred
-null-folder proposal is documented once in section 4.
+When a pane's folder is unknown, save prints `(folder unknown)` for that pane,
+keeps the rest of the snapshot, and ends its summary with a warning naming the
+affected window and tab and stating it can't be restored, for example:
+`1 tab saved without a folder: window 2, tab 3 (it can't be restored)`. Save
+still fails and preserves snapshots for all other capture errors.
 
 ### UX rules
 
@@ -188,7 +191,8 @@ null-folder proposal is documented once in section 4.
 3. **Restore targets the window tsr runs in.** The first selected tab runs in the current tab; the others open as new tabs after it, in saved order. Restoring into a window that already has other tabs is allowed; tabs are appended.
 4. **Picking means resuming.** Selected agent tabs start their resume command immediately. Plain shell tabs open in their folder.
 5. **Verified duplicates are blocked; uncertainty is shown.** Restore never duplicates a session it can verify as running; for sessions it can't verify, it says so before you pick them. Exact live identities running in Ghostty and confirmed tsr-launched processes are blocked. Pending tsr reservations are temporarily blocked. Unidentified live processes produce `may already be open` on the rows covered by the agent's scope rule (section 6), including processes located `outside Ghostty`. No unverified row is described as "not running".
-6. **Missing folders are disabled**, with the reason, because Claude can only resume from the original folder (F12).
+6. **Missing or unknown folders are disabled**, with the reason. A null-cwd row
+   is shown as `folder unknown` and cannot be selected.
 7. **No surprises after restart.** Everything `restore` will do is visible in the picker before Enter: which tabs, in what order, and why any are disabled.
 8. **Never block on tsr.** If tsr fails for any reason, Ghostty and the agents work exactly as without it.
 
@@ -202,27 +206,29 @@ A snapshot is one JSON file describing windows → tabs → panes, written in te
 | --- | --- |
 | `~/.local/state/tsr/snapshot.json` | Current snapshot |
 | `~/.local/state/tsr/snapshot.prev.json` | Previous snapshot (backup) |
-| `~/.local/state/tsr/restored.json` | tsr-owned reservation/lifecycle records: identity, state, terminal ID and reserved-at timestamp, plus observed process identity when confirmed; see below. No 60-second pruning rule. This file may evolve independently of snapshot format 1. |
+| `~/.local/state/tsr/restored.json` | tsr-owned reservation/lifecycle records: identity, state, terminal ID and reserved-at timestamp, plus observed process identity when confirmed; see below. No 60-second pruning rule. This file may evolve independently of the snapshot schema. |
 | `~/.local/state/tsr/restore.lock` | Exclusive `fcntl.flock` used only for the bounded recheck-and-reserve critical section and coordinated reservation updates; never held while the picker waits or while tabs launch |
 | `~/.local/state/tsr/tsr.log` | Rotating log, 1 MB × 3 |
 
 Respect `XDG_STATE_HOME`. Directory mode `0700`, files `0600`. Every write goes to a temp file in the same directory, then `os.replace`, so a crash never leaves a half-written snapshot. After capture, stage the new snapshot, a copy of current for the backup, and the old backup for rollback. Install the backup before replacing current; leave current in place until its final atomic replacement. A failed final replacement rolls back the backup. This avoids a missing-current window; if rollback also fails, retain the old backup's secure temporary file and report its location.
 
-### Schema (format 1)
+### Schema (formats 1 and 2)
 
-**Format 1 is frozen.** Continue reading M1 snapshots without migration. Do not
-add fields or confidence values for ambiguity or reservations. Every `cwd` must
-be a nonempty string. The owner deferred Decision B's null-folder proposal
-because it changes this requirement; unresolved folders still fail save.
+Format 1 remains readable unchanged: every pane `cwd` must be a nonempty string.
+Format 2 has the same schema, except `cwd` may be null when the folder cannot be
+determined reliably. All new saves write format 2. Readers accept formats 1 and
+2 without migrating or rewriting either file; current and backup slots may use
+different formats. A format-3 snapshot is refused with the upgrade message.
+Nothing else changes between formats, and `restored.json` remains independent.
 
 ```json
 {
-  "format": 1,
+  "format": 2,
   "id": "0196f0a2-7c1e-7d3a-9b2f-1c2d3e4f5a6b",
   "saved_at": "2026-11-10T17:42:05Z",
   "boot_time": 1762700000,
   "host": "example-mac",
-  "tsr_version": "0.1.0",
+  "tsr_version": "0.2.0",
   "terminal": { "app": "ghostty", "version": "1.4.0" },
   "windows": [
     {
@@ -246,7 +252,7 @@ because it changes this requirement; unresolved folders still fail save.
                 "session_id": "00000000-0000-4000-8000-000000000001",
                 "session_file": "/Users/USER/.claude/projects/PROJECT/00000000-0000-4000-8000-000000000001.jsonl",
                 "confidence": "exact",
-                "method": "open-file",
+                "method": "live-metadata",
                 "first_prompt": "refactor auth middleware",
                 "git_branch": "main",
                 "resume_argv": ["claude", "--resume", "00000000-0000-4000-8000-000000000001"]
@@ -263,6 +269,8 @@ because it changes this requirement; unresolved folders still fail save.
 Rules:
 
 - `agent` is `null` for a plain shell pane.
+- In format 2, `cwd` is an absolute path or null. Null means unknown and is
+  never replaced by another directory. Format 1 rejects null cwd.
 - `command_text` is the process display text captured from ps. `argv` is null
   unless an independent source supplies actual argument boundaries; never claim
   `shlex.split(command_text)` recovers the original vector (F38). Identification
@@ -287,7 +295,7 @@ pane identity for a picker/plain row, `state`, `terminal_id` (null until
 creation returns it for a new tab), and `reserved_at` as UTC Unix seconds. The current-tab
 reservation starts with its known terminal ID. Capture may add the normalized
 tty and the observed PID, process start and boot identity needed to reject stale
-or reused processes. None of these fields is added to snapshot format 1.
+or reused processes. None of these fields is added to the snapshot schema.
 Picker reservations contain the agent and saved row key but no guessed session
 ID/file: the selected conversation is not known until the agent's picker is used.
 
@@ -339,7 +347,7 @@ Broader real-agent acceptance remains listed in [v1.md](v1.md).
 
 ### Window labels
 
-For each window, find the git repository root of each pane's `cwd` by walking up to a directory containing `.git` (no subprocess). The label is the basename of the most common root, ties broken by the first tab's. With no repositories, use the basename of the most common `cwd`; with no panes, `Window <n>`. If two windows have the same label, append ` (2)`, ` (3)` in window order.
+For each window, find the git repository root of each known pane `cwd` by walking up to a directory containing `.git` (no subprocess). Ignore null cwd panes. The label is the basename of the most common root, ties broken by the first tab's. With no repositories, use the basename of the most common known `cwd`; when all panes have null cwd or there are no panes, use `Window <n>`. If two windows have the same label, append a disambiguating suffix in window order.
 
 ## 5. Save: how capture works
 
@@ -351,7 +359,7 @@ For each window, find the git repository root of each pane's `cwd` by walking up
 2. **Layout: one AppleScript call.** Iterate `windows` → bulk tab properties → bulk terminal properties (F44) and return one line per terminal with ASCII-9-separated fields: window index, window `id`, tab `index`, tab `id`, tab `name`, terminal `id`, `tty`, `working directory`, `pid` (F1, F9). Use ASCII character 9 explicitly because Ghostty also defines a `tab` class. Replace tabs and newlines inside names with spaces before joining. Window order is AppleScript's (front to back); keep it.
 3. **Processes: one `ps` call.** `ps -A -ww -o pid=,ppid=,tty=,lstart=,args=` (F21). Run ps with `LC_ALL=C TZ=UTC` and lsof with `LC_ALL=C`; lstart is the five tokens after tty. UTC permits comparison with Claude's registry `procStart` (F32). Normalize tty names by removing a `/dev/` prefix and then a leading `tty` (`/dev/ttys003` and `ttys003` → `s003`; F23).
 4. **Find each pane's agent.** For each terminal, take the processes on its tty. Ask each agent adapter whether a process's raw `command_text` identifies its agent (section 8); do not reconstruct argv by shell parsing (F38). If several match on one tty, take the outermost (the one with no matching ancestor). No match → plain shell pane; whatever else runs there (an editor, a dev server) is not restored.
-5. **Folders and open files: one `lsof` call** over all agent PIDs and their descendants (a launcher, such as a Node wrapper, may leave the transcript to a child process), plus terminal foreground PIDs: `lsof -n -P -a -p <pid,pid,…> -Fpfn` (F43). Read each agent's working directory from its own `fcwd` entry, and the open files of the agent and its descendants. Plain panes prefer their foreground process's readable lsof cwd, then Ghostty's getter: the getter can be empty (F41) or nonempty but stale after exec (F53). Decode the measured lsof C/hex/backslash forms (F54); fail safely on ambiguous caret/control cwd representations. If neither is available, retain the existing format-1 behavior: fail capture without replacing the existing snapshot; never substitute tsr's cwd or HOME. Decision B would instead preserve a plain pane with null cwd and flag it, but is blocked by the frozen schema (section 4); it is not an active capture rule.
+5. **Folders and open files: one `lsof` call** over all agent PIDs and their descendants (a launcher, such as a Node wrapper, may leave the transcript to a child process), plus terminal foreground PIDs: `lsof -n -P -a -p <pid,pid,…> -Fpfn` (F43). Read each agent's working directory from its own `fcwd` entry, and the open files of the agent and its descendants. Plain panes prefer their foreground process's readable lsof cwd, then Ghostty's getter: the getter can be empty (F41) or nonempty but stale after exec (F53). Decode the measured lsof C/hex/backslash forms (F54). If neither source yields a reliable absolute folder, including ambiguous caret/control representations, record null cwd; never substitute tsr's cwd or HOME. Preserve the rest of the capture and warn in the save summary.
 6. **Identify sessions** with the strategies below, tried in order per agent pane; the first that succeeds wins.
 7. **Describe sessions.** Read the first prompt and branch from the identified transcript (adapter `describe`, section 8). Read at most the first 200 lines. Claude: the first line with type user whose content is text not starting with < and isn't a tool result; skip metadata-only records (F13). pi: the first line with type message and message.role user, reading text blocks (F30). Codex: `response_item` with `payload.type=message`, `payload.role=user`, and `input_text` text blocks; skip environment-context text starting with < (F30). Use null when the prompt or branch is unclear.
 8. **Write and print.** Compute labels (section 4), move the old snapshot to the backup slot (asking first if it's from before the last boot, section 3), write the new one, print the summary (section 3). No Ghostty windows → exit 3 "nothing to save" and leave existing snapshots untouched.
@@ -411,7 +419,7 @@ implement it from dictionary evidence alone or run it during M0.
 | A tsr reservation has a confirmed matching agent process whose recorded process identity is still live | `running · restored by tsr` | No |
 | A tsr reservation is awaiting a matching process, for at most two minutes | `starting` | No |
 | Folder no longer exists | `folder missing` | No |
-| Folder unknown | `folder unknown` | No; reserved UX only, because Decision B is blocked and null cwd is invalid in frozen format 1 |
+| Folder unknown (format 2 null cwd) | `folder unknown` | No |
 | Unidentified live process covers this row under the agent's warning scope | `may already be open` (include `outside Ghostty` when applicable), plus its resume/picker label below | Yes, unless independently blocked |
 | Confidence `likely`, method `recent-transcript`, more than one such saved pane in the same agent/folder group | `ambiguous · opens <agent>'s picker` | Yes, unless independently blocked |
 | Confidence `picker` | `opens <agent>'s picker` | Yes, unless independently blocked |
@@ -516,7 +524,7 @@ Input: the selected panes in saved order, the current window `id`, the current t
 2. **New tabs:** every other selected pane becomes a new tab in the current window, in saved order.
 3. **Command per pane:** validate commands, then use `shlex.join(resume_argv)` for exact and unambiguous likely agent panes. Command-line likely rows resume the named session; a singleton saved recent-transcript group retains its likely resume. When multiple saved `recent-transcript` panes share an agent and canonical folder, downgrade each to the agent's own folder-scoped picker. Confidence `picker` also opens that picker. Derive this from the whole snapshot, not just selected rows, so selecting one ambiguous pane does not erase its ambiguity. Do not rewrite the saved argv or confidence. Plain shells get no command in a new tab; in the current tab, a plain shell pane means changing to its folder and starting the user's login shell (`$SHELL -l`).
 
-The snapshot-count derivation preserves format 1; it cannot recover the original
+The snapshot-count derivation preserves saved snapshots; it cannot recover the original
 candidate count (section 5). A singleton is an unambiguous group for this product
 rule, still labeled likely, not evidence of exact identity.
 Reject a selection that would launch the same named session twice before
@@ -564,7 +572,7 @@ tsr has no install command of its own: uv installs, upgrades and removes it, and
 | Job | Command |
 | --- | --- |
 | Prerequisite (once) | `sudo port install uv` (F22) |
-| Install a release | `uv tool install "git+ssh://git@github.com/millionviews/tools@tsr-v0.1.0#subdirectory=tsr"` |
+| Install a release | `uv tool install "git+ssh://git@github.com/millionviews/tools@tsr-v0.2.0#subdirectory=tsr"` |
 | Move to another release | the same command with the new tag and `--force` |
 | Uninstall | `uv tool uninstall tsr` (snapshots stay; remove them with `rm -rf ~/.local/state/tsr`) |
 | Run from a checkout, for development | `uv run tsr …` inside `tsr/` |
@@ -611,7 +619,7 @@ v1 ships one terminal adapter (Ghostty on macOS) and three agent adapters, but t
            │   identification strategies [...]                   │          ▼          ▼       │
            │            │                                   snapshot   Step list   TerminalAdapter
            │            ▼                                     store                 .open_tab() …
-           └──────► snapshot store (JSON, format 1) ◄────────────┘                                │
+           └──────► snapshot store (JSON, formats 1/2) ◄────────┘                                │
                                                                                                    │
   Runner (every subprocess call: osascript, ps, lsof) ─── replaced by fakes in tests ─────────────┘
 ```
@@ -674,8 +682,9 @@ reads and per-invocation caches/readiness records; they have no global state.
 
 - **Save never destroys a good snapshot.** Any failure during capture leaves `snapshot.json` and `snapshot.prev.json` untouched.
 - **Partial capture is still saved.** If one pane's identification or description fails, record it with confidence `picker` and continue; the summary shows it.
-- **Unresolved folders fail capture** and preserve both snapshots. Null cwd is
-  deferred under frozen format 1 (section 4); never invent a folder.
+- **Unknown folders do not fail capture.** Save writes format 2 with null cwd,
+  shows `(folder unknown)` and warns that the row can't be restored. All other
+  capture failures preserve both snapshots. Never invent a folder.
 - **Restore continues past failures.** A failed tab is reported in the summary line; the remaining steps still run (section 6).
 - **Reservations are not success claims.** Failed tab creation/shell readiness
   releases the affected reservation immediately. Unconfirmed launches lapse
@@ -757,8 +766,17 @@ Each is a test the implementation must pass on a real Mac with Ghostty 1.4. The 
   exec failure cleanup too.
 - **AC-20** M2 reads unchanged M1 format-1 current and backup snapshots, derives
   ambiguity without adding schema fields, and leaves those files unchanged
-  during restore. Decision B has no null-cwd acceptance criterion until its
-  format conflict is resolved.
+  during restore.
+- **AC-21** When a plain or agent pane has no reliable folder, save succeeds,
+  writes format 2 with null cwd for that pane, preserves the rest of the snapshot
+  and prints the unknown-folder summary warning. Listing shows `(folder unknown)`
+  with no command; restore shows a disabled `folder unknown` row in saved
+  position. Partial and all-null window labels ignore null panes and fall back
+  to `Window <n>` when none have a known cwd.
+- **AC-22** Readers accept format-1 and format-2 current/backup snapshots in
+  either mixed-slot order without rewriting either file. Format 1 with null cwd
+  is malformed; format 2 round-trips null cwd for plain and agent panes; format
+  3 is refused with the upgrade message.
 
 ## 11. Testing plan
 
@@ -782,11 +800,11 @@ Tests use `unittest` only. Everything below runs in CI on macOS with Python 3.14
 | Describe | First prompt and branch per agent from fixture transcripts; system-tag lines skipped |
 | Snapshot store | Atomic write, backup rotation, refusal of newer `format`, file modes |
 | Labels | Repository detection, ties, duplicates suffixed |
-| Availability | Exact live blocking, confirmed tsr-restored processes, pending/lapsed reservations, folder missing, picker/ambiguous/likely/plain rows, and scope-specific uncertainty including outside Ghostty; unknown-folder UX remains blocked by format compatibility |
+| Availability | Exact live blocking, confirmed tsr-restored processes, pending/lapsed reservations, folder missing/unknown, picker/ambiguous/likely/plain rows, and scope-specific uncertainty including outside Ghostty |
 | Planner | First selected pane to the current tab (agent or shell), the rest as new tabs in saved order, a selection spanning several windows |
 | Executor | Script text per step (escaping), shell wait polling, continue after failure, reservation terminal-ID updates, final `exec` (patched), and immediate per-row cleanup on tab/shell/input/exec failure |
 | Restore lock and lifecycle | Picker takes no lock; bounded exclusive flock; selected-row recheck without AppleScript/lsof; atomic reservations before launch; competing restores cannot reserve the same session; return to picker on newly blocked rows; pending to running via tty/agent/start evidence; live confirmed process persists beyond two minutes; lapse, exit, PID/tty reuse and failure cleanup; never infer session identity from picker-row reservation alone |
-| Format-1 compatibility | Read existing M1 snapshots unchanged; derive ambiguity from the full saved agent/folder group even for a one-row selection; use picker commands as a downgrade without rewriting saved confidence/argv |
+| Snapshot compatibility | Read format 1 and format 2 independently in either state slot; format 1 requires nonempty cwd; format 2 round-trips null cwd; reject format 3; do not rewrite snapshots during reads/restores; derive ambiguity from full groups |
 | Picker | Selection logic driven without a real terminal: Space on window and tab, Enter with and without selection, disabled rows ignored |
 | Doctor | Each doctor result, including the curses and PATH checks |
 
@@ -814,13 +832,13 @@ These confirm things the design assumes but no source states outright. Run them 
 | S13 | Can lsof numeric network/port output avoid resolution overhead without changing cwd/file-path capture? | Inspect installed help, then compare plain and numeric-output batch reads on the live captured PIDs. Measure timings and compare cwd and transcript paths. | Retain the original command and report measured performance without claiming the target passed. |
 | S14 | Can bulk tab/terminal property reads reduce AppleScript latency without changing layout? | Compare the existing read-only layout script with bulk property records, preserving window/tab/terminal IDs, order, tty and cwd. Measure both on the same live layout. | Keep the validated existing traversal and disclose the measured timing. |
 | S15 (complete) | Does explicit Codex resume cross folders, and what folder/worktree evidence supports warnings? | Owner-confirmed marker continuity passed for Codex 0.167.1 (F49); the Git relationship is documented in F52 and contract-tested. Missing-cwd rechecks retain or broaden uncertainty. | Codex warnings are agent-wide; missing folder evidence never proves availability. |
-| S16 (CHECK 3 measured; strict rule answered no) | Does a tsr-created terminal's tty plus agent process start reliably confirm a reserved launch and its lifecycle, including the current-tab exec case? | Owner-approved two-tab probe: normal Codex launch in A, shell-level exec via a recording Python helper in B, owner quit, then read-only exit checks. Tty association and pre-exec PID/start continuity worked for Codex 0.167.1; both recorded identities disappeared on exit (F50). Strict start-after-reservation failed for exec and same-second timing (F51). The isolated probe shells initially lacked nvm PATH; temporary exports fixed only those tabs. B required Enter to close after owner quit. | The adopted confirmation rule and remaining limits are in section 4. This probe did not exercise M2 or its actual reservation file. Validate the normal tsr-under-parent-shell handoff, agent launcher variants and stale/reuse cases before claiming that broader coverage; keep snapshot format 1 unchanged. |
-| S17 (complete) | Can the Ghostty cwd be stale after exec, and how does lsof encode paths? | Actual plain-shell restore/read-only follow-up found a stale nonempty getter and measured seven path cases (F53–F54). Foreground-cwd preference and decoding then produced all three expected folders. | Ambiguous caret/control forms fail safely and preserve snapshots rather than invent a path. |
+| S16 (CHECK 3 measured; strict rule answered no) | Does a tsr-created terminal's tty plus agent process start reliably confirm a reserved launch and its lifecycle, including the current-tab exec case? | Owner-approved two-tab probe: normal Codex launch in A, shell-level exec via a recording Python helper in B, owner quit, then read-only exit checks. Tty association and pre-exec PID/start continuity worked for Codex 0.167.1; both recorded identities disappeared on exit (F50). Strict start-after-reservation failed for exec and same-second timing (F51). The isolated probe shells initially lacked nvm PATH; temporary exports fixed only those tabs. B required Enter to close after owner quit. | The adopted confirmation rule and remaining limits are in section 4. This probe did not exercise M2 or its actual reservation file. Validate the normal tsr-under-parent-shell handoff, agent launcher variants and stale/reuse cases before claiming that broader coverage; keep existing format-1 snapshots readable. |
+| S17 (complete) | Can the Ghostty cwd be stale after exec, and how does lsof encode paths? | Actual plain-shell restore/read-only follow-up found a stale nonempty getter and measured seven path cases (F53–F54). Foreground-cwd preference and decoding then produced all three expected folders. | Ambiguous caret/control forms yield null cwd and a save warning rather than an invented path. |
 
 ## 13. Milestones and definition of done
 
 Current implementation: all four commands (`save`, `list`, `restore`, `doctor`)
-are implemented. Thirty-four contract tests pass after review. The last live capture returned 12
+are implemented. Thirty-eight contract tests pass after the format-2 change. The last live capture returned 12
 windows / 65 tabs in 2.780 s; actual Ghostty picker/plain-shell restore and the
 production local-tag install/reinstall/uninstall checks passed (F55–F56).
 See [v1 verification](v1.md) for the acceptance matrix and precise limits.
@@ -830,7 +848,7 @@ Implementation status as of 2026-11-10:
 | Area | Implemented | Remaining verification or work |
 | --- | --- | --- |
 | M0 evidence | Local probes, source checks and anonymized fixtures through S17 | Fresh-account S5, private S8 after publication, pi's exact heading and broader real-agent acceptance |
-| M1 capture/list | Private atomic snapshots/backups, adapters, labels, confidence, save/list; S17 foreground-cwd/encoding correction | Exact reference desktop and independent agent-reported IDs remain manual acceptance |
+| M1 capture/list | Private atomic snapshots/backups, adapters, labels, confidence, save/list; format-2 null cwd and mixed format readers; S17 foreground-cwd/encoding correction | Exact reference desktop and independent agent-reported IDs remain manual acceptance |
 | M2 restore | Availability, curses picker, pure planner, executor, locking/reservations and failure cleanup; contract tests and live plain-shell/typing checks | Full real-agent restore acceptance and live reference multi-window/race checks; Codex daemon query stays deferred |
 | M3 packaging/doctor | Doctor, section 7 package/entry point, actual isolated tagged production install/reinstall/uninstall, README and macOS CI configuration | Owner publication/release tag, private SSH/default-account install, fresh-account prompt and hosted CI execution; restart remains omitted |
 
@@ -844,7 +862,10 @@ remain owner-managed.
 - **A / Q2:** replace unconditional duplicate prevention with verified blocking
   and explicit scoped `may already be open` warnings (sections 1, 3, 6 and 10).
   The Codex daemon query is excluded pending the separate owner decision below.
-- **B — deferred:** preserve format 1's nonempty cwd requirement (section 4).
+- **B — adopted as snapshot format 2:** format 1 remains readable with its
+  original nonempty-cwd requirement; new saves use format 2, where cwd may be
+  null. Readers accept mixed current/backup formats without migration (sections
+  3–6, 9–11 and AC-21/AC-22).
 - **Q1:** retain exact/command-line likely resumes; downgrade multi-pane saved
   recent-transcript groups to the agent's picker. Derive ambiguity from the full
   snapshot, without changing confidence or schema (sections 3–6, AC-6/AC-10).
@@ -867,7 +888,7 @@ remain owner-managed.
   section 4 records the implemented bounded evidence rule and limits (F50–F51).
 - **Completion authorization:** implement M2/M3 without milestone approval stops.
   Defer the optional Codex daemon query while its owner decision is open; retain
-  Decision B's existing format-1 behavior. Keep desktop permission and read-only
+  Decision B's format-2 behavior. Keep desktop permission and read-only
   agent/configuration constraints. Local implementation verification is F55–F56;
   remaining external/manual acceptance is listed in [v1.md](v1.md).
 

@@ -26,8 +26,8 @@ import time
 from typing import Protocol
 import uuid
 
-__version__ = "0.1.0"
-FORMAT = 1
+__version__ = "0.2.0"
+FORMAT = 2
 SESSION_ID = re.compile(r"[A-Za-z0-9._:-]{6,128}\Z")
 AUTOMATION_FIX = "System Settings → Privacy & Security → Automation → allow the requesting app to control Ghostty"
 
@@ -114,7 +114,7 @@ class AgentInfo:
 class Pane:
     terminal_id: str
     tty: str
-    cwd: str
+    cwd: str | None
     fg_pid: int = 0
     agent: AgentInfo | None = None
 
@@ -157,7 +157,7 @@ class Snapshot:
                 raise ValueError("missing format")
             if obj["format"] > FORMAT:
                 raise TsrError("snapshot format is newer than this tsr; upgrade tsr")
-            if obj["format"] != FORMAT:
+            if obj["format"] not in {1, 2}:
                 raise ValueError("unsupported format")
             windows = []
             for w in obj["windows"]:
@@ -178,9 +178,12 @@ class Snapshot:
                                 raise ValueError("invalid confidence")
                             a = AgentInfo(**{**a, "resume_argv": tuple(a["resume_argv"]),
                                              "argv": tuple(a["argv"]) if a.get("argv") else None})
-                        panes.append(Pane(p["terminal_id"], p["tty"], p["cwd"], p.get("fg_pid", 0), a))
-                        if not isinstance(p["cwd"], str) or not p["cwd"]:
+                        cwd = p["cwd"]
+                        if obj["format"] == 1 and (not isinstance(cwd, str) or not cwd):
                             raise ValueError("missing folder")
+                        if obj["format"] == 2 and cwd is not None and (not isinstance(cwd, str) or not cwd):
+                            raise ValueError("invalid folder")
+                        panes.append(Pane(p["terminal_id"], p["tty"], cwd, p.get("fg_pid", 0), a))
                     tabs.append(Tab(t["index"], t.get("terminal_tab_id", ""), t["title"], tuple(panes)))
                 windows.append(Window(w["index"], w["terminal_window_id"], tuple(tabs), w["label"]))
             datetime.fromisoformat(obj["saved_at"].replace("Z", "+00:00"))
@@ -931,7 +934,7 @@ def label_windows(windows: tuple[Window, ...], roots: dict[str, str | None]) -> 
     counts: Counter[str] = Counter()
     result = []
     for window in windows:
-        cwds = [p.cwd for t in window.tabs for p in t.panes]
+        cwds = [p.cwd for t in window.tabs for p in t.panes if p.cwd]
         folders = [roots[cwd] for cwd in cwds if roots[cwd]] or cwds
         label = Path(Counter(folders).most_common(1)[0][0]).name if folders else f"Window {window.index}"
         label = label or f"Window {window.index}"
@@ -969,14 +972,21 @@ def capture(runner: Runner, home: Path, environment: dict[str, str], *,
     for pane in panes:
         match = selected.get(pane.terminal_id)
         pid = match[0].pid if match else pane.fg_pid
-        if pid in opened.uncertain_cwd:
-            raise TsrError("a terminal folder has ambiguous lsof escaping; move to a folder without control/caret sequences and retry")
-        folder = opened.cwd.get(pid) or pane.cwd
-        if not folder or not Path(folder).is_absolute():
-            raise TsrError("a terminal's folder could not be read; keep terminals open and retry capture")
-        folder = os.path.realpath(folder)
+        folder = None
+        if match:
+            process, adapter = match
+            try:
+                folder = adapter.runtime_cwd(process.pid, process.start_utc)
+            except (OSError, ValueError, TypeError, KeyError):
+                pass
+        if pid not in opened.uncertain_cwd:
+            folder = folder or opened.cwd.get(pid) or pane.cwd
+        if folder and Path(folder).is_absolute():
+            folder = os.path.realpath(folder)
+        else:
+            folder = None
         folders[pane.terminal_id] = folder
-        if not match:
+        if not match or not folder:
             continue
         process, adapter = match
         paths = tuple(path for pid in descendants(process.pid, processes) for path in opened.paths.get(pid, ()))
@@ -1006,6 +1016,26 @@ def capture(runner: Runner, home: Path, environment: dict[str, str], *,
             except (OSError, ValueError, TypeError, KeyError):
                 candidates[(adapter.name, folder)] = ()
     identifications = identify(tuple(observations), candidates)
+    for pane in panes:
+        match = selected.get(pane.terminal_id)
+        if not match or folders[pane.terminal_id]:
+            continue
+        process, adapter = match
+        chosen = None
+        for read, confidence, method in (
+            (lambda: adapter.session_from_runtime(process.pid, process.start_utc), "exact", "live-metadata"),
+            (lambda: adapter.session_from_open_files(tuple(path for child in descendants(process.pid, processes)
+                                                           for path in opened.paths.get(child, ()))), "exact", "open-file"),
+            (lambda: adapter.session_from_argv(process.command_text), "likely", "argv"),
+        ):
+            try:
+                ref = read()
+                if ref:
+                    chosen = Identification(ref, confidence, method)
+                    break
+            except (OSError, ValueError, TypeError, KeyError):
+                logging.getLogger("tsr").debug("Session evidence unavailable", exc_info=True)
+        identifications[pane.terminal_id] = chosen or Identification(None, "picker", "none")
     captured = []
     for window in windows:
         tabs = []
@@ -1028,7 +1058,7 @@ def capture(runner: Runner, home: Path, environment: dict[str, str], *,
                 captured_panes.append(replace(pane, cwd=folders[pane.terminal_id], agent=info))
             tabs.append(replace(tab, panes=tuple(captured_panes)))
         captured.append(replace(window, tabs=tuple(tabs)))
-    roots = {folder: repository_root(folder) for folder in set(folders.values())}
+    roots = {folder: repository_root(folder) for folder in set(folders.values()) if folder}
     labeled = label_windows(tuple(captured), roots)
     saved = (now or datetime.now(UTC)).astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
     return Snapshot(FORMAT, snapshot_id or str(uuid.uuid7()), saved, boot, socket.gethostname(),
@@ -1151,7 +1181,7 @@ def restore_rows(snapshot: Snapshot, adapters: tuple[AgentAdapter, ...], shell: 
     registry = {a.name: a for a in adapters}
     counts = Counter((p.agent.name, os.path.realpath(p.cwd))
                      for w in snapshot.windows for t in w.tabs for p in t.panes
-                     if p.agent and p.agent.method == "recent-transcript")
+                     if p.cwd and p.agent and p.agent.method == "recent-transcript")
     rows = []
     for wi, w in enumerate(snapshot.windows):
         for ti, t in enumerate(w.tabs):
@@ -1165,7 +1195,8 @@ def restore_rows(snapshot: Snapshot, adapters: tuple[AgentAdapter, ...], shell: 
                     if adapter is None:
                         argv, note = (), "agent unsupported; upgrade tsr"
                     else:
-                        ambiguous = a.method == "recent-transcript" and counts[(a.name, os.path.realpath(p.cwd))] > 1
+                        ambiguous = bool(p.cwd and a.method == "recent-transcript" and
+                                         counts[(a.name, os.path.realpath(p.cwd))] > 1)
                         valid = adapter.valid_ref(SessionRef(a.name, a.session_id, a.session_file))
                         picker = a.confidence == "picker" or ambiguous or not valid
                         if not picker:
@@ -1228,12 +1259,12 @@ def availability(rows: tuple[RestoreRow, ...], agents: tuple[LiveAgent, ...], le
             blocked = "folder unknown"
         elif row.pane.cwd not in folders:
             blocked = "folder missing"
-        if row.ref:
+        if row.pane.cwd and row.ref:
             for agent in agents:
                 if agent.ref and same_session(row.ref, agent.ref):
                     blocked = "running · " + agent.location
                     break
-        for lease in leases:
+        for lease in (leases if row.pane.cwd else ()):
             if not lease_matches(row, lease):
                 continue
             if lease["state"] == "running":
@@ -1242,7 +1273,7 @@ def availability(rows: tuple[RestoreRow, ...], agents: tuple[LiveAgent, ...], le
                 blocked = "starting"
             else:
                 notes.append("restored earlier, not seen running")
-        if row.ref and not blocked:
+        if row.pane.cwd and row.ref and not blocked:
             for agent in agents:
                 if agent.name != row.ref.agent or agent.ref:
                     continue
@@ -1485,7 +1516,7 @@ def pick(rows: tuple[RestoreRow, ...], available: dict[str, PaneAvailability], h
                     prefix = f"   {mark} {name:<6} "
                     budget = max(0, width - 1 - len(prefix))
                     note = visible(status.reason)[:budget]
-                    folder = visible(display_folder(row.pane.cwd, home))
+                    folder = visible(display_folder(row.pane.cwd, home)) if row.pane.cwd else ""
                     folder_room = max(0, budget - len(note) - (2 if note else 0))
                     if len(folder) > folder_room:
                         folder = '…' + folder[-(folder_room - 1):] if folder_room > 1 else ''
@@ -1513,7 +1544,7 @@ def pick(rows: tuple[RestoreRow, ...], available: dict[str, PaneAvailability], h
 
 
 def row_availability(rows: tuple[RestoreRow, ...], live: LiveState, leases: list[dict], now: float):
-    folders = {r.pane.cwd for r in rows if Path(r.pane.cwd).is_dir()}
+    folders = {r.pane.cwd for r in rows if r.pane.cwd and Path(r.pane.cwd).is_dir()}
     all_folders = folders | {a.cwd for a in live.agents if a.cwd}
     repositories = {folder: common_repository(folder) for folder in all_folders}
     return availability(rows, live.agents, leases, now=now, folders=folders, repositories=repositories)
@@ -1726,8 +1757,9 @@ def render(snapshot: Snapshot, home: Path, *, saved: bool = False) -> str:
                 name = {"claude": "Claude", "codex": "Codex", "pi": "pi"}.get(agent.name, agent.name) if agent else "shell"
                 prompt = (agent.first_prompt or ("(session not identified)" if agent.confidence == "picker" else "(no prompt)")) if agent else ""
                 note = agent.confidence if agent else ""
-                lines.append(f"  {number:>3}  {name:<6}  {visible(prompt)}  {visible(display_folder(pane.cwd, home))}  {note}".rstrip())
-                if not saved:
+                folder = visible(display_folder(pane.cwd, home)) if pane.cwd else "(folder unknown)"
+                lines.append(f"  {number:>3}  {name:<6}  {visible(prompt)}  {folder}  {note}".rstrip())
+                if not saved and pane.cwd:
                     command = f"cd -- {shlex.quote(pane.cwd)}"
                     if agent:
                         command += " && " + shlex.join(agent.resume_argv)
@@ -1814,6 +1846,12 @@ def main(argv: list[str] | None = None, *, runner: Runner | None = None,
         store.save(snapshot)
         print(render(snapshot, home, saved=True))
         print("Saved. Restart when ready.")
+        unknown = sorted({(w.index, t.index) for w in snapshot.windows for t in w.tabs
+                          if any(p.cwd is None for p in t.panes)})
+        if unknown:
+            labels = ", ".join(f"window {window}, tab {tab}" for window, tab in unknown)
+            noun = "tab" if len(unknown) == 1 else "tabs"
+            print(f"{len(unknown)} {noun} saved without a folder: {labels} (it can't be restored)")
         return 0
     except KeyboardInterrupt:
         print("tsr: interrupted; inspect tsr list before retrying", file=sys.stderr)

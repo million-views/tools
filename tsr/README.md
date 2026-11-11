@@ -67,9 +67,9 @@ The first selected pane runs in the current tab; the rest append as new tabs.
 Selected agents start their planned resume or picker command; plain shells open
 in their saved folders.
 Ambiguous recent-transcript groups and unidentified sessions open the agent's
-own picker. A missing folder disables the row. Frozen format-1 snapshots from
-M1 remain readable; null folders remain unsupported, so unresolved folders still
-fail save while preserving its previous snapshot.
+own picker. A missing folder disables the row. Format-1 snapshots from M1 remain
+readable; new saves use format 2 and preserve panes with unknown folders as null
+cwd. Such rows remain visible in list and restore but cannot be selected.
 
 Verified running sessions and active restore reservations are disabled. When an
 agent's current session cannot be verified, affected rows say **may already be
@@ -91,7 +91,7 @@ after its final check; tsr coordinates only its own restores.
 Install a published release with MacPorts uv and your repository SSH access:
 
 ```sh
-uv tool install "git+ssh://git@github.com/millionviews/tools@tsr-v0.1.0#subdirectory=tsr"
+uv tool install "git+ssh://git@github.com/millionviews/tools@tsr-v0.2.0#subdirectory=tsr"
 ```
 
 Use a new release tag with `--force` to upgrade. Publication and the project

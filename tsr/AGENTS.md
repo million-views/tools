@@ -3,7 +3,7 @@
 - Read all of `docs/spec.md` before starting. The spec is the source of truth.
 - The owner has authorized taking tsr through completion, including M2/M3.
   Continue implementation and verification without milestone approval stops.
-  Preserve frozen M1 format-1 snapshots; Decision B stays deferred. Keep
+  Preserve readability of M1 format-1 snapshots; format 2 permits null cwd. Keep
   outstanding external evidence gaps explicit without inventing successful checks.
 - Section 2 contains the only external behavior implementation may rely on.
   If another fact about Ghostty, macOS, Claude Code, Codex, pi or uv is needed,

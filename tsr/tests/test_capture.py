@@ -175,15 +175,92 @@ class CaptureContract(unittest.TestCase):
             "TSR_VERSION\t1.4.0\n1\tw\t1\tt\tshell\tsurface\t/dev/ttys031\t\t48681\n")
         self.runner.outputs["lsof"] = tsr.CommandResult("")
         code, out, err = self.cli(["save"])
-        self.assertEqual(code, 1)
-        self.assertIn("folder could not be read", err)
-        self.assertEqual((self.store.directory / "snapshot.json").read_bytes(), original)
+        self.assertEqual(code, 0, err)
+        self.assertIn("(folder unknown)", out)
+        self.assertIn("1 tab saved without a folder", out)
+        saved = self.store.load()
+        self.assertEqual(saved.format, 2)
+        self.assertIsNone(saved.windows[0].tabs[0].panes[0].cwd)
         paths = tsr.parse_open_files('p1\nfcwd\nn/tmp/back\\\\slash\nf4\nn/tmp/unicode-\\xc3\\xa9\n'
                                      'p2\nfcwd\nn/tmp/control^A\n')
         self.assertEqual(paths.cwd[1], '/tmp/back\\slash')
         self.assertEqual(paths.paths[1], ('/tmp/unicode-é',))
         self.assertNotIn(2, paths.cwd)
         self.assertEqual(paths.uncertain_cwd, {2})
+
+    def test_format_two_unknown_folders_round_trip_and_slots_mix_without_rewriting(self):
+        original = self.snapshot()
+        panes = [p for w in original.windows for t in w.tabs for p in t.panes]
+        agent_pane = next(p for p in panes if p.agent)
+        shell_pane = next(p for p in panes if not p.agent)
+        changed = replace(original, format=2, windows=(replace(original.windows[0], tabs=(
+            replace(original.windows[0].tabs[0], panes=(replace(agent_pane, cwd=None),
+                                                         replace(shell_pane, cwd=None))),)),))
+        loaded = tsr.Snapshot.from_json(changed.to_json())
+        self.assertEqual([p.cwd for p in loaded.windows[0].tabs[0].panes], [None, None])
+        self.assertIsNotNone(loaded.windows[0].tabs[0].panes[0].agent)
+        invalid_v1 = json.loads(changed.to_json())
+        invalid_v1["format"] = 1
+        with self.assertRaisesRegex(tsr.TsrError, "malformed"):
+            tsr.Snapshot.from_json(json.dumps(invalid_v1))
+        future = json.loads(changed.to_json())
+        future["format"] = 3
+        with self.assertRaisesRegex(tsr.TsrError, "upgrade"):
+            tsr.Snapshot.from_json(json.dumps(future))
+
+        v1 = replace(original, format=1)
+        v2 = changed
+        self.store.save(v1)
+        self.store.save(v2)
+        current_bytes = (self.store.directory / "snapshot.json").read_bytes()
+        backup_bytes = (self.store.directory / "snapshot.prev.json").read_bytes()
+        self.assertEqual(self.store.load().format, 2)
+        self.assertEqual(self.store.load(backup=True).format, 1)
+        self.assertEqual((self.store.directory / "snapshot.json").read_bytes(), current_bytes)
+        self.assertEqual((self.store.directory / "snapshot.prev.json").read_bytes(), backup_bytes)
+        self.store.save(v1)
+        self.store.save(v2)
+        self.assertEqual(self.store.load().format, 2)
+        self.assertEqual(self.store.load(backup=True).format, 1)
+        self.store.save(v2)
+        self.store.save(v1)
+        self.assertEqual(self.store.load().format, 1)
+        self.assertEqual(self.store.load(backup=True).format, 2)
+
+    def test_save_unknown_folder_keeps_snapshot_and_displays_warning_and_null_json(self):
+        shell_pid = 54222
+        layout = self.runner.outputs["osascript"].stdout
+        fields = next(line for line in layout.splitlines() if line.endswith("\t54222"))
+        empty_shell = "\t".join(fields.split("\t")[:-2] + ["", str(shell_pid)])
+        self.runner.outputs["osascript"] = tsr.CommandResult(layout.replace(fields, empty_shell))
+        opened = self.runner.outputs["lsof"].stdout
+        self.runner.outputs["lsof"] = tsr.CommandResult("".join(
+            "p" + chunk for chunk in opened.split("p") if not chunk.startswith(f"{shell_pid}\n")))
+        code, out, err = self.cli(["save"])
+        self.assertEqual(code, 0, err)
+        self.assertIn("(folder unknown)", out)
+        self.assertIn("1 tab saved without a folder: window 1, tab 1 (it can't be restored)", out)
+        snapshot = self.store.load()
+        self.assertEqual(snapshot.format, 2)
+        unknown = next(p for w in snapshot.windows for t in w.tabs for p in t.panes if p.cwd is None)
+        self.assertIsNone(unknown.agent)
+        code, out, err = self.cli(["list"])
+        self.assertEqual(code, 0, err)
+        row = out.split("(folder unknown)")[0].splitlines()[-1]
+        self.assertNotIn("cd --", row)
+        code, out, err = self.cli(["list", "--json"])
+        panes = [p for w in json.loads(out)["windows"] for t in w["tabs"] for p in t["panes"]]
+        unknown = [p for p in panes if p["cwd"] is None]
+        self.assertEqual(len(unknown), 1)
+        self.assertIsNone(unknown[0]["agent"])
+
+    def test_ambiguous_lsof_control_cwd_is_saved_as_unknown(self):
+        layout = "1\tw\t1\tt\tshell\tsurface\t/dev/ttys031\t\t54222\n"
+        self.runner.outputs["osascript"] = tsr.CommandResult("TSR_VERSION\t1.4.0\n" + layout)
+        self.runner.outputs["ps"] = tsr.CommandResult("54222 1 ttys031 Mon Nov 10 10:00:00 2026 -zsh\n")
+        self.runner.outputs["lsof"] = tsr.CommandResult("p54222\nfcwd\nn/tmp/control^A\n")
+        snapshot = self.snapshot()
+        self.assertIsNone(snapshot.windows[0].tabs[0].panes[0].cwd)
 
     def test_runtime_change_overrides_stale_argv_and_bad_registry_degrades(self):
         other = "11111111-1111-4111-8111-111111111111"
@@ -241,11 +318,11 @@ class CaptureContract(unittest.TestCase):
     def test_future_snapshot_refused_and_agent_state_directory_rejected(self):
         self.store.ensure_directory()
         path = self.store.directory / "snapshot.json"
-        path.write_text('{"format": 2}')
+        path.write_text('{"format": 3}')
         code, out, err = self.cli(["list", "--json"])
         self.assertEqual(code, 1)
         self.assertIn("upgrade", err)
-        self.assertEqual(path.read_text(), '{"format": 2}')
+        self.assertEqual(path.read_text(), '{"format": 3}')
         for root in (".claude", ".codex", ".pi"):
             self.env["XDG_STATE_HOME"] = str(self.home / root)
             code, out, err = self.cli(["save"])
@@ -346,6 +423,12 @@ class DecisionContract(unittest.TestCase):
         self.assertEqual([w.label for w in result], ["repo", "repo (2)"])
         tied = replace(window, tabs=(tsr.Tab(1, "t", "title", panes[:2]),))
         self.assertEqual(tsr.label_windows((tied,), {"/repo/a": None, "/outside": None})[0].label, "a")
+        partly_unknown = replace(window, tabs=(tsr.Tab(1, "t", "title",
+            (replace(panes[0], cwd=None), panes[1], panes[2])),))
+        self.assertEqual(tsr.label_windows((partly_unknown,), {"/outside": None})[0].label, "outside")
+        all_unknown = replace(window, tabs=(tsr.Tab(1, "t", "title",
+            tuple(replace(pane, cwd=None) for pane in panes)),))
+        self.assertEqual(tsr.label_windows((all_unknown,), {})[0].label, "Window 1")
         self.assertEqual(tsr.label_windows((tsr.Window(3, "empty", ()),), {})[0].label, "Window 3")
 
 

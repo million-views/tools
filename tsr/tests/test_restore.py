@@ -146,6 +146,22 @@ class RestoreContract(unittest.TestCase):
                 self.assertEqual(available.selectable, allowed)
                 self.assertIn(reason, available.reason)
 
+    def test_null_cwd_rows_remain_in_position_and_are_disabled_without_duplicate_warnings(self):
+        unknown_shell = self.pane("shell", cwd=self.folder)
+        unknown_agent = replace(self.pane("agent", info()), cwd=None)
+        unknown_shell = replace(unknown_shell, cwd=None)
+        rows = self.rows((unknown_shell, unknown_agent, self.pane("known", info(sid="other-session"))))
+        availability = tsr.availability(rows, (
+            tsr.LiveAgent("codex", tsr.Process(99, 1, "outside", "s", 1, "codex"),
+                          None, None, "outside Ghostty", None),), [], now=10,
+            folders={self.folder}, repositories={})
+        self.assertEqual([r.pane.terminal_id for r in rows], ["shell", "agent", "known"])
+        self.assertEqual(availability[rows[0].key].reason, "folder unknown")
+        self.assertEqual(availability[rows[1].key].reason, "folder unknown")
+        self.assertFalse(availability[rows[0].key].selectable)
+        self.assertFalse(availability[rows[1].key].selectable)
+        self.assertIn("may already be open", availability[rows[2].key].reason)
+
     def test_picker_window_selection_disabled_rows_and_cross_window_saved_order(self):
         panes = (self.pane("a"), self.pane("b", info()), self.pane("c"))
         snap = self.snapshot(panes[:2])
