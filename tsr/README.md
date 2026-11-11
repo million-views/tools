@@ -7,7 +7,7 @@ Requires Ghostty 1.4 or newer. Install a release with uv and access to the
 private repository:
 
 ```sh
-uv tool install "git+ssh://git@github.com/millionviews/tools@tsr-v0.2.0#subdirectory=tsr"
+uv tool install "git+ssh://git@github.com/million-views/tools@tsr-v0.2.0#subdirectory=tsr"
 ```
 
 Run `tsr doctor` first. Then, before a restart, save and review the capture:

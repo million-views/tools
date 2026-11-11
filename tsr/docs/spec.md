@@ -111,7 +111,7 @@ The reproducible procedure and pending checks are in [m0.md](m0.md).
 | F37 | S4 follow-up: ten fresh slow-starting zsh tabs received complete single-line markers with zero settle delay (10/10). The prior 8/10 result used a quoted newline; it cannot establish that startup timing alone caused the missing markers. Retain the 200 ms conservative fallback from F26, but keep multiline input reliability explicitly limited. S7 appending also held for these ten trials (indices 22–31). | [Single-line report](../tests/fixtures/s4-single-line.json) |
 | F38 | S10: two harmless Python children with distinct vectors `["TWO WORDS"]` and `["TWO", "WORDS"]` produced identical `ps args` text on this Mac. Quotes/backslashes were also displayed without an invertible argument encoding. `shlex.split(ps_args)` cannot in general recover original argv. This tests ps transport, not a simulated agent. Parse only explicitly validated unambiguous resume patterns; an ambiguous pi path must fall through. | [Real child output](../tests/fixtures/s10-argv.json), [probe](../scripts/m0-argv.py) |
 | F39 | S9: installed pi 1.5.1 parses bare `--resume`/`-r` as the picker; its selector defaults to current-folder scope and provides an all-sessions loader. The owner ran `pi --resume` and reported that cancellation quits pi; the exact heading was not explicitly reported. Source distinguishes absolute/path-like `--session` arguments (open directly) from globally found bare IDs (prompt to fork). Prefer absolute session-file paths. Owner-run Claude/Codex picker checks are recorded separately in F48. | [Installed source/usage](../tests/fixtures/s9-picker-source.txt), [owner observation](../tests/fixtures/s9-pi-owner.json) |
-| F40 | S8: an isolated temporary git repository containing section 7's layout installed successfully via `git+file://...@<tag>#subdirectory=tsr`, using uv-managed Python 3.14.8 and curses. Its entry point used tagged code despite a later worktree edit; scoped PATH lookup and uninstall passed. The private SSH/default-user PATH installation was not tested by this probe. The private URL returned `Repository not found` during the probe. | [Local tagged install](../tests/fixtures/s8-local-tag-install.json), [private endpoint output](../tests/fixtures/s8-private-remote.txt), [isolated probe](../scripts/m0-install.py) |
+| F40 | S8: an isolated temporary git repository containing section 7's layout installed successfully via `git+file://...@<tag>#subdirectory=tsr`, using uv-managed Python 3.14.8 and curses. Its entry point used tagged code despite a later worktree edit; scoped PATH lookup and uninstall passed. The private SSH/default-user PATH installation was not tested by this probe. Its original URL used an incorrect GitHub owner slug; the corrected URL is in section 7. | [Local tagged install](../tests/fixtures/s8-local-tag-install.json), [historical private endpoint output](../tests/fixtures/s8-private-remote.txt), [isolated probe](../scripts/m0-install.py) |
 | F41 | S4 cleanup inspection: all 32 isolated zsh probe terminals returned an empty AppleScript `working directory`, despite a configured initial directory. Read-only lsof cwd records for their live shell PIDs returned the correct three probe directories. The getter therefore cannot be assumed populated for every shell configuration. Include foreground PIDs for panes with missing cwd in the existing lsof batch and use that cwd as the fallback; never invent a folder. | [Terminal projection](../tests/fixtures/s4-empty-terminal-cwds.tsv), [lsof cwd records](../tests/fixtures/s4-empty-cwd.txt) |
 | F42 | S12: stdlib ctypes called macOS `sysctlbyname("kern.boottime", old_value, old_length, NULL, 0)` read-only and returned the same seconds/microseconds as the F21 command. The observed timeval was 16 bytes (`long` seconds, 32-bit microseconds plus alignment). Validate return code and returned size; do not use uninitialized values on failure. This supplies boot time without a fourth subprocess. | [Native/command comparison](../tests/fixtures/s12-boot-time.json) |
 | F43 | S13: installed lsof help defines `-n` as no host names and `-P` as no port names. On 64 live PIDs, plain/numeric-output reads took 0.155/0.059 s; cwd maps and observed transcript-path sets agreed. Other absolute-file maps differed between successive live reads, so this is not a frozen-descriptor snapshot guarantee. Use numeric output to avoid unrelated name resolution. | [Measured comparison](../tests/fixtures/s13-lsof-numeric.json), installed `lsof -h` |
@@ -565,19 +565,19 @@ All AppleScript strings are escaped (section 9). The executor never types into a
 
 ## 7. Installation and doctor
 
-tsr has no install command of its own: uv installs, upgrades and removes it, and provides Python 3.14. tsr lives in the shared `millionviews/tools` repository, in its own `tsr/` folder.
+tsr has no install command of its own: uv installs, upgrades and removes it, and provides Python 3.14. tsr lives in the shared `million-views/tools` repository, in its own `tsr/` folder.
 
 ### Installing, upgrading, removing
 
 | Job | Command |
 | --- | --- |
 | Prerequisite (once) | `sudo port install uv` (F22) |
-| Install a release | `uv tool install "git+ssh://git@github.com/millionviews/tools@tsr-v0.2.0#subdirectory=tsr"` |
+| Install a release | `uv tool install "git+ssh://git@github.com/million-views/tools@tsr-v0.2.0#subdirectory=tsr"` |
 | Move to another release | the same command with the new tag and `--force` |
 | Uninstall | `uv tool uninstall tsr` (snapshots stay; remove them with `rm -rf ~/.local/state/tsr`) |
 | Run from a checkout, for development | `uv run tsr …` inside `tsr/` |
 
-uv runs as the user, so it fetches the private repository with the user's own git credentials. S8 confirmed uv-managed Python 3.14 with `curses` locally (F29); the private git subdirectory/tag install and installed PATH behavior remain pending.
+uv runs as the user, so it fetches the private repository with the user's own git credentials. S8 confirmed uv-managed Python 3.14 with `curses` locally (F29); validate the corrected private git subdirectory/tag install and installed PATH behavior before relying on it.
 
 ### Packaging
 
